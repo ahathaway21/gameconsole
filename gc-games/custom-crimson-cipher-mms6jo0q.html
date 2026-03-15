@@ -101,6 +101,35 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
 .t2{background:linear-gradient(135deg,#1e0e00,#312000);border-color:#a0581e;color:#f0a060;}
 .t3{background:linear-gradient(135deg,#081e08,#0d2e0d);border-color:#2e7a2e;color:#80c880;}
 .t4{background:linear-gradient(135deg,#120820,#1e1035);border-color:#6a3aaa;color:#b880f0;}
+.t5{background:linear-gradient(135deg,#1a0a0a,#2e1010);border-color:#b83030;color:#f07070;}
+.t6{background:linear-gradient(135deg,#0a1a1a,#102828);border-color:#208080;color:#50d0d0;}
+/* Move timer */
+.timer-stat .stat-value{transition:color .2s;}
+.timer-stat.danger .stat-value{color:var(--crimson-b)!important;animation:tpulse-txt .4s ease-in-out infinite alternate;}
+@keyframes tpulse-txt{from{opacity:1;}to{opacity:.5;}}
+.timer-bar-bg{height:3px;background:rgba(255,255,255,.07);border-radius:3px;margin-top:3px;overflow:hidden;}
+.timer-bar-fill{height:100%;border-radius:3px;transition:width .1s linear,background .3s;}
+.timer-bar-safe{background:var(--gold);}
+.timer-bar-danger{background:var(--crimson-b);}
+
+/* Tile vibration when ≤3s */
+@keyframes tvib{
+  0%,100%{transform:translate(0,0);}
+  20%{transform:translate(-2px,1px);}
+  40%{transform:translate(2px,-1px);}
+  60%{transform:translate(-1px,2px);}
+  80%{transform:translate(1px,-2px);}
+}
+.grid-danger .tile:not(.selected):not(.matched){
+  animation:tvib .7s ease-in-out infinite;
+}
+.grid-danger .tile:nth-child(even):not(.selected):not(.matched){
+  animation-delay:.15s;
+}
+.grid-danger .tile:nth-child(3n):not(.selected):not(.matched){
+  animation-delay:.3s;
+}
+
 .tile.ev-reveal{animation:evreveal .7s ease-out!important;}
 @keyframes evreveal{
   0%{transform:scale(0.5);opacity:0;filter:brightness(3);}
@@ -184,11 +213,21 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
 .btn.gold{background:linear-gradient(135deg,#5a4010,var(--gold));border-color:var(--gold);color:#1a1000;}
 .modal strong{color:var(--gold);}
 .hidden{display:none!important;}
-.mute-btn{position:absolute;top:10px;right:10px;background:var(--surface);
+.mute-btn{background:var(--surface);
   border:1px solid var(--gold-d);border-radius:7px;padding:5px 9px;cursor:pointer;
   font-size:15px;line-height:1;color:var(--text-dim);transition:all .18s;}
 .mute-btn:hover{border-color:var(--gold);color:var(--gold);}
 .mute-btn.muted{opacity:.45;}
+
+/* Pause overlay on grid */
+.pause-overlay{position:absolute;inset:0;border-radius:10px;
+  background:rgba(5,5,16,.92);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;z-index:20;
+  font-family:'Playfair Display',serif;}
+.pause-title{font-size:1.6rem;color:var(--gold);letter-spacing:4px;margin-bottom:6px;}
+.pause-sub{font-size:.65rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:3px;}
+#grid.paused .tile span{visibility:hidden;}
+#grid.paused .tile{filter:brightness(.3);}
 </style>
 </head>
 <body>
@@ -198,6 +237,7 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
   <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:3px;">
     <div class="subtitle" style="margin:0;">A Detective Match-3 Mystery</div>
     <button class="mute-btn" id="mute-btn" onclick="toggleMute()" title="Toggle sound">🔊</button>
+    <button class="mute-btn" id="pause-btn" onclick="togglePause()" title="Pause">⏸</button>
   </div>
 </div>
 
@@ -205,6 +245,7 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
   <div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score-val">0</div></div>
   <div class="stat"><div class="stat-label">Case</div><div class="stat-value" id="level-val">1</div></div>
   <div class="stat"><div class="stat-label">Moves</div><div class="stat-value" id="moves-val">25</div></div>
+  <div class="stat timer-stat" id="timer-stat"><div class="stat-label">Time</div><div class="stat-value" id="timer-val">5.0</div><div class="timer-bar-bg"><div class="timer-bar-fill timer-bar-safe" id="timer-bar" style="width:100%"></div></div></div>
   <div class="stat"><div class="stat-label">Lives</div><div class="stat-value" id="lives-val">♥♥♥♥♥</div></div>
 </div>
 
@@ -238,6 +279,10 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
 
 <div class="grid-wrap" id="grid-wrap">
   <div id="grid"></div>
+  <div class="pause-overlay hidden" id="pause-overlay">
+    <div class="pause-title">PAUSED</div>
+    <div class="pause-sub">Tap ⏸ to resume</div>
+  </div>
 </div>
 
 <div class="evidence-panel">
@@ -260,11 +305,15 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
 
 <script>
 // ─── CONSTANTS ──────────────────────────────────────────────
-const GS = 7, TYPES = 5, EV_TYPE = 5, EV_NEED = 3, STRIDE = 46;
+const GS = 7, TYPES = 7, EV_TYPE = 7, EV_NEED = 3, STRIDE = 46;
 
 const TD = [
-  {e:'🔍',l:'Clue'},{e:'🗝️',l:'Key'},{e:'🕯️',l:'Candle'},{e:'📜',l:'Scroll'},{e:'🔮',l:'Crystal'}
+  {e:'🔍',l:'Clue'},{e:'🗝️',l:'Key'},{e:'🕯️',l:'Candle'},
+  {e:'📜',l:'Scroll'},{e:'🔮',l:'Crystal'},
+  {e:'💀',l:'Skull'},{e:'⚗️',l:'Vial'}
 ];
+
+function activeTypes(){return Math.min(TYPES,5+Math.floor(levelIdx/7));}
 
 const LEVELS = [
   {goal:1000, moves:20,story:"The vault stands open — its lock shattered from within. A faint scent of roses. Someone wanted you to find this."},
@@ -302,6 +351,10 @@ let selCell=null,animLock=false,firstMatchDone=false;
 let shakeCells=new Set();
 let totalScore=0,playerXP=0,playerLv=1,streak=0,lives=5;
 let dailyClaimed=false,unlockedA=new Set();
+
+// ─── MOVE TIMER ──────────────────────────────────────────────
+const MOVE_TIME=8.0;
+let moveTimeLeft=MOVE_TIME, timerInterval=null, timerActive=false, paused=false;
 
 // ─── STORAGE ────────────────────────────────────────────────
 const ls=(k)=>localStorage.getItem(k);
@@ -349,6 +402,14 @@ function toggleMute(){
   btn.textContent=muted?'🔇':'🔊';
   btn.classList.toggle('muted',muted);
 }
+function togglePause(){
+  if(animLock)return;
+  paused=!paused;
+  document.getElementById('pause-btn').textContent=paused?'▶':'⏸';
+  document.getElementById('pause-overlay').classList.toggle('hidden',!paused);
+  document.getElementById('grid').classList.toggle('paused',paused);
+  if(paused&&selCell){selCell=null;renderGrid();}
+}
 function sndMatch(n,cas=0){
   const b=440+cas*55;
   const ff=n>=5?[b,b*1.25,b*1.5,b*2]:n>=4?[b,b*1.25,b*1.5]:[b,b*1.25];
@@ -361,9 +422,57 @@ function sndSelect(){tone(660,.07,'sine',.09);}
 function sndAchv(){[880,1100].forEach((f,i)=>setTimeout(()=>tone(f,.25,'sine',.18),i*140));}
 function sndDaily(){[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.2,'sine',.18),i*90));}
 
+// ─── MOVE TIMER ──────────────────────────────────────────────
+function startMoveTimer(){
+  clearInterval(timerInterval);
+  moveTimeLeft=MOVE_TIME;timerActive=true;
+  updateTimerUI();
+  timerInterval=setInterval(()=>{
+    if(animLock||paused){return;}
+    moveTimeLeft=Math.max(0,+(moveTimeLeft-.1).toFixed(1));
+    updateTimerUI();
+    if(moveTimeLeft<=0){
+      timerExpired();
+    }
+  },100);
+}
+function stopMoveTimer(){
+  clearInterval(timerInterval);timerActive=false;
+  setGridDanger(false);
+  updateTimerUI();
+}
+function resetMoveTimer(){startMoveTimer();}
+
+function updateTimerUI(){
+  const el=document.getElementById('timer-val');
+  const bar=document.getElementById('timer-bar');
+  const stat=document.getElementById('timer-stat');
+  if(!el)return;
+  const danger=moveTimeLeft<=3&&timerActive;
+  el.textContent=timerActive?moveTimeLeft.toFixed(1):'—';
+  bar.style.width=(timerActive?(moveTimeLeft/MOVE_TIME*100):100)+'%';
+  bar.className='timer-bar-fill '+(danger?'timer-bar-danger':'timer-bar-safe');
+  stat.classList.toggle('danger',danger);
+  setGridDanger(danger&&timerActive);
+}
+function setGridDanger(on){
+  document.getElementById('grid').classList.toggle('grid-danger',on);
+}
+
+function timerExpired(){
+  stopMoveTimer();
+  if(selCell){selCell=null;renderGrid();}
+  if(movesLeft<=0)return;
+  movesLeft--;
+  tone(180,.18,'square',.15);
+  updateUI();
+  checkWinLose();
+  startMoveTimer();
+}
+
 // ─── GRID CORE ──────────────────────────────────────────────
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-function rndType(){return Math.floor(Math.random()*TYPES);}
+function rndType(){return Math.floor(Math.random()*activeTypes());}
 
 // ─── EVIDENCE SPAWN SCHEDULE ─────────────────────────────────
 let evSpawned=0, evThresholds=[];
@@ -384,7 +493,7 @@ function injectEvTile(){
   // Collect all non-evidence, non-empty cells
   const candidates=[];
   for(let r=0;r<GS;r++)for(let c=0;c<GS;c++){
-    if(grid[r][c].t>=0&&grid[r][c].t<TYPES)candidates.push({r,c});
+    if(grid[r][c].t>=0&&grid[r][c].t!==EV_TYPE)candidates.push({r,c});
   }
   if(!candidates.length)return;
   const{r,c}=candidates[Math.floor(Math.random()*candidates.length)];
@@ -401,18 +510,13 @@ function injectEvTile(){
 function initGrid(){
   grid=[];
   for(let r=0;r<GS;r++){grid[r]=[];for(let c=0;c<GS;c++)grid[r][c]={t:rndType(),id:uid++};}
-  let tries=0;
-  while(findMatches().size>0&&tries<40){
-    for(let r=0;r<GS;r++)for(let c=0;c<GS;c++)grid[r][c]={t:rndType(),id:uid++};
-    tries++;
-  }
 }
 
 function findMatches(){
   const f=new Set();
   for(let r=0;r<GS;r++){
     let c=0;while(c<GS){
-      const t=grid[r][c].t;if(t<0||t>=TYPES){c++;continue;}
+      const t=grid[r][c].t;if(t<0||t===EV_TYPE){c++;continue;}
       let e=c+1;while(e<GS&&grid[r][e].t===t)e++;
       if(e-c>=3)for(let i=c;i<e;i++)f.add(r+','+i);
       c=e;
@@ -420,7 +524,7 @@ function findMatches(){
   }
   for(let c=0;c<GS;c++){
     let r=0;while(r<GS){
-      const t=grid[r][c].t;if(t<0||t>=TYPES){r++;continue;}
+      const t=grid[r][c].t;if(t<0||t===EV_TYPE){r++;continue;}
       let e=r+1;while(e<GS&&grid[e][c].t===t)e++;
       if(e-r>=3)for(let i=r;i<e;i++)f.add(i+','+c);
       r=e;
@@ -484,7 +588,7 @@ async function animSwap(r1,c1,r2,c2){
 }
 
 async function handleClick(r,c){
-  if(animLock)return;
+  if(animLock||paused)return;
   const tile=grid[r][c];
   if(tile.t===EV_TYPE){
     if(selCell){selCell=null;renderGrid();}
@@ -511,8 +615,10 @@ async function handleClick(r,c){
   }else{
     movesLeft--;
     checkEvSpawn();
+    stopMoveTimer();
     await processMatches();
     checkWinLose();
+    if(movesLeft>0)startMoveTimer();
   }
   animLock=false;
 }
@@ -531,9 +637,10 @@ async function collectEv(r,c){
     showToast('📁','Case Complete!','Evidence Secured','+3 bonus moves awarded!');
     [880,1100,1320].forEach((f,i)=>setTimeout(()=>tone(f,.22,'sine',.18),i*100));
   }
-  const nt={t:Math.floor(Math.random()*TYPES),id:uid++};
+  const nt={t:Math.floor(Math.random()*activeTypes()),id:uid++};
   newIds.add(nt.id);grid[r][c]=nt;
   renderGrid();updateUI();saveData();
+  resetMoveTimer();
 }
 
 // ─── RENDERING ──────────────────────────────────────────────
@@ -587,6 +694,12 @@ function startLevel(idx){
   if(levelIdx>=9)unlockA('lv10');
   initGrid();buildGrid();renderGrid();
   updateUI();updateEvSlots();updateLB();closeModal();saveData();
+  // Announce new tile type unlocks
+  if(levelIdx===7)showToast('💀','New Threat!','Skull tiles appear','A 6th tile type joins the board!');
+  if(levelIdx===14)showToast('⚗️','New Threat!','Vial tiles appear','A 7th tile type joins the board!');
+  // Auto-clear any matches present on the starting board
+  animLock=true;
+  processMatches().then(()=>{animLock=false;startMoveTimer();updateUI();});
 }
 
 function checkWinLose(){
@@ -656,7 +769,7 @@ function showWelcome(){
   showModal();
 }
 
-function showModal(){document.getElementById('modal-overlay').classList.remove('hidden');}
+function showModal(){stopMoveTimer();document.getElementById('modal-overlay').classList.remove('hidden');}
 function closeModal(){document.getElementById('modal-overlay').classList.add('hidden');}
 
 // ─── DAILY REWARD ────────────────────────────────────────────
