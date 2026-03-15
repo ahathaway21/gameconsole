@@ -113,7 +113,7 @@ function ghRead(){
 function ghWrite(data){
   if(!GH.configured()) return Promise.resolve({ok:false,status:0,msg:'Not configured'});
   var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-data.json';
-  var headers={'Authorization':'token '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+  var headers={'Authorization':'Bearer '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json','X-GitHub-Api-Version':'2022-11-28'};
   return fetch(apiUrl,{headers:headers})
     .then(function(r){ return r.ok?r.json():null; })
     .then(function(existing){
@@ -133,7 +133,7 @@ function ghWrite(data){
 function ghWriteGameFile(id, html){
   if(!GH.configured()) return Promise.resolve({ok:false,msg:'Not configured'});
   var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-games/'+id+'.html';
-  var headers={'Authorization':'token '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+  var headers={'Authorization':'Bearer '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json','X-GitHub-Api-Version':'2022-11-28'};
   return fetch(apiUrl,{headers:headers})
     .then(function(r){ return r.ok?r.json():null; })
     .then(function(existing){
@@ -149,7 +149,7 @@ function ghWriteGameFile(id, html){
 function ghDeleteGameFile(id){
   if(!GH.configured()) return Promise.resolve(false);
   var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-games/'+id+'.html';
-  var headers={'Authorization':'token '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+  var headers={'Authorization':'Bearer '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json','X-GitHub-Api-Version':'2022-11-28'};
   return fetch(apiUrl,{headers:headers})
     .then(function(r){ return r.ok?r.json():null; })
     .then(function(existing){
@@ -374,17 +374,6 @@ function renderBoot(app){
     +'<div id="boot-status" style="font-size:12px;color:rgba(255,255,255,.3);margin-top:4px">Starting...</div>'
     +'</div>';
   setTimeout(function(){
-    // ── FRESH START: clear all local data except GH config ──
-    var ghConfig = gsGet('gc:gh-config');
-    var toRemove = [];
-    for(var i=0; i<localStorage.length; i++){
-      var k = localStorage.key(i);
-      if(k && k.startsWith('gc:') && k !== 'gc:gh-config') toRemove.push(k);
-    }
-    localStorage.removeItem('gc:me');
-    toRemove.forEach(function(k){ localStorage.removeItem(k); });
-    if(ghConfig) gsSet('gc:gh-config', ghConfig);
-    // ── END FRESH START ──
     checkInviteParam();
     var status=document.getElementById('boot-status');
     if(status) status.textContent=GH.configured()?'Syncing...':'Loading...';
@@ -954,7 +943,7 @@ function renderAdmin(app){
       if(!t.startsWith('ghp_')&&!t.startsWith('github_pat_')&&t.length<10){ msgEl.innerHTML='<p class="err-msg">Access key looks too short — please check and try again.</p>'; return; }
       ghSaveBtn.textContent='Testing...'; ghSaveBtn.disabled=true;
       // Step 1: verify repo is reachable
-      fetch('https://api.github.com/repos/'+o+'/'+r,{headers:{'Authorization':'token '+t,'Accept':'application/vnd.github.v3+json'}})
+      fetch('https://api.github.com/repos/'+o+'/'+r,{headers:{'Authorization':'Bearer '+t,'Accept':'application/vnd.github.v3+json','X-GitHub-Api-Version':'2022-11-28'}})
         .then(function(res){
           if(res.status===401) throw new Error('Access key is invalid or expired. Please generate a new one.');
           if(res.status===403) throw new Error('Access key does not have permission to access this repository.');
@@ -1022,6 +1011,7 @@ function renderAdmin(app){
   // Export
   document.getElementById('adm-export').addEventListener('click',function(){
     var data={};
+    // Include all core data keys — users, invites, games, scores, and cloud storage settings
     var keys=['gc:users','gc:invites','gc:custom-games','gc:gh-config'];
     keys.forEach(function(k){ var v=gsGet(k); if(v) data[k]=v; });
     for(var i=0;i<localStorage.length;i++){
@@ -1035,7 +1025,8 @@ function renderAdmin(app){
     a.href=url; a.download='gamecenter-archive-'+new Date().toISOString().slice(0,10)+'.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     var msg=document.getElementById('adm-export-msg');
-    if(msg) msg.innerHTML='<p class="ok-msg">&#10003; Archive downloaded!</p>';
+    var hasGhConfig=!!(gsGet('gc:gh-config')&&gsGet('gc:gh-config').token);
+    if(msg) msg.innerHTML='<p class="ok-msg">&#10003; Archive downloaded! Includes users, scores, games'+(hasGhConfig?', and cloud storage settings.':'.')+'</p>';
   });
 
   // Restore
