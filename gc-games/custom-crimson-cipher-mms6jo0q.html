@@ -245,23 +245,23 @@ h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:v
 
 <script>
 // ─── CONSTANTS ──────────────────────────────────────────────
-const GS = 7, TYPES = 5, EV_TYPE = 5, EV_CHANCE = .045, EV_NEED = 3, STRIDE = 46;
+const GS = 7, TYPES = 5, EV_TYPE = 5, EV_CHANCE = .035, EV_NEED = 3, STRIDE = 46;
 
 const TD = [
   {e:'🔍',l:'Clue'},{e:'🗝️',l:'Key'},{e:'🕯️',l:'Candle'},{e:'📜',l:'Scroll'},{e:'🔮',l:'Crystal'}
 ];
 
 const LEVELS = [
-  {goal:600,  moves:25,story:"The vault stands open — its lock shattered from within. A faint scent of roses. Someone wanted you to find this."},
-  {goal:1200, moves:23,story:"A monogrammed glove near the window. Initials: R.V. Your best informant goes silent that same night."},
-  {goal:2200, moves:21,story:"The Crimson Cipher: an ancient decoder that no modern algorithm can crack. Governments have killed for less."},
-  {goal:3500, moves:20,story:"Lady Voss. Socialite. Philanthropist. The city whispers she holds secrets that could topple a dynasty."},
-  {goal:5200, moves:19,story:"Her mansion is a labyrinth. Every painting hides a clue. Every smile conceals a calculated betrayal."},
-  {goal:7200, moves:18,story:"A second Cipher exists. Someone has been two steps ahead of you — watching from the very start."},
-  {goal:9800, moves:17,story:"A traitor in your department. Every move you made was fed to the enemy. You've been hunting blind."},
-  {goal:13000,moves:16,story:"Midnight at the docks. The exchange is imminent. You have one chance to stop the handoff."},
-  {goal:17000,moves:16,story:"The mastermind steps into the light. You've crossed paths before. You just didn't know it then."},
-  {goal:22000,moves:15,story:"The Crimson Cipher doesn't decode messages. It unlocks a vault containing evidence that could bring down an empire. Case closed."},
+  {goal:1000, moves:20,story:"The vault stands open — its lock shattered from within. A faint scent of roses. Someone wanted you to find this."},
+  {goal:2000, moves:18,story:"A monogrammed glove near the window. Initials: R.V. Your best informant goes silent that same night."},
+  {goal:3500, moves:17,story:"The Crimson Cipher: an ancient decoder that no modern algorithm can crack. Governments have killed for less."},
+  {goal:5500, moves:16,story:"Lady Voss. Socialite. Philanthropist. The city whispers she holds secrets that could topple a dynasty."},
+  {goal:8000, moves:15,story:"Her mansion is a labyrinth. Every painting hides a clue. Every smile conceals a calculated betrayal."},
+  {goal:11000,moves:14,story:"A second Cipher exists. Someone has been two steps ahead of you — watching from the very start."},
+  {goal:15000,moves:13,story:"A traitor in your department. Every move you made was fed to the enemy. You've been hunting blind."},
+  {goal:20000,moves:13,story:"Midnight at the docks. The exchange is imminent. You have one chance to stop the handoff."},
+  {goal:26000,moves:12,story:"The mastermind steps into the light. You've crossed paths before. You just didn't know it then."},
+  {goal:33000,moves:12,story:"The Crimson Cipher doesn't decode messages. It unlocks a vault containing evidence that could bring down an empire. Case closed."},
 ];
 
 const ACHV = [
@@ -396,8 +396,8 @@ async function processMatches(){
     const m=findMatches();if(m.size===0)break;
     const keys=[...m];
     keys.forEach(k=>{const[r,c]=k.split(',').map(Number);cellEls[r][c].classList.add('matched');});
-    const multi=1+cas*.55;
-    const pts=Math.floor(keys.length*65*multi);
+    const multi=1+cas*.40;
+    const pts=Math.floor(keys.length*50*multi);
     score+=pts;totalScore+=pts;
     showScorePop(pts,cas);
     sndMatch(keys.length,cas);
