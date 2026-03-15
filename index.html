@@ -134,6 +134,31 @@ function submitScore(gameId,pts){
 }
 
 /* ================================================================
+   INVITE LINK  — encode/decode invite data in URL so cross-browser
+================================================================ */
+function checkInviteParam(){
+  try {
+    var params=new URLSearchParams(window.location.search);
+    var raw=params.get('gc_invite');
+    if(!raw) return;
+    var inv=JSON.parse(atob(raw));
+    if(!inv||!inv.email) return;
+    // Seed this browser's localStorage so doEmailNext finds the invite
+    var existing=gsGet('gc:invites')||[];
+    var found=existing.find(function(i){return i.email===inv.email&&i.status==='pending';});
+    if(!found) gsSet('gc:invites',existing.concat([inv]));
+    // Clean the URL without reloading
+    var clean=window.location.pathname;
+    window.history.replaceState({},'',clean);
+  } catch(e){}
+}
+
+function makeInviteLink(invObj){
+  var base=window.location.origin+window.location.pathname;
+  return base+'?gc_invite='+btoa(JSON.stringify(invObj));
+}
+
+/* ================================================================
    ROUTER
 ================================================================ */
 function go(screen,extra){
@@ -152,6 +177,7 @@ function render(){
     case 'board':  renderBoard(app);  break;
     case 'invite': renderInvite(app); break;
     case 'upload': renderUpload(app); break;
+    case 'admin':  renderAdmin(app);  break;
     default:       renderBoot(app);
   }
 }
@@ -165,6 +191,7 @@ function renderBoot(app){
     +'<div class="spinner"></div>'
     +'</div>';
   setTimeout(function(){
+    checkInviteParam();
     S.customGames=gsGet('gc:custom-games')||[];
     var email=localStorage.getItem('gc:me');
     var users=gsGet('gc:users')||[];
@@ -351,6 +378,7 @@ function renderHub(app){
       +'<div style="display:flex;gap:7px">'
         +'<button class="btn btn-ghost" id="hub-invite" style="padding:8px 12px;font-size:12px">&#128101; Invite</button>'
         +'<button class="btn btn-ghost" id="hub-upload" style="padding:8px 12px;font-size:12px">&#8679; Games</button>'
+        +(S.user.email===FOUNDER_EMAIL?'<button class="btn btn-ghost" id="hub-admin" style="padding:8px 12px;font-size:12px">&#9881; Admin</button>':'')
         +'<button class="btn btn-ghost" id="hub-logout" style="padding:8px 10px;font-size:15px">&#9167;</button>'
       +'</div>'
     +'</div>'
@@ -368,6 +396,8 @@ function renderHub(app){
 
   document.getElementById('hub-invite').addEventListener('click',function(){ go('invite'); });
   document.getElementById('hub-upload').addEventListener('click',function(){ go('upload'); });
+  var adminBtn=document.getElementById('hub-admin');
+  if(adminBtn) adminBtn.addEventListener('click',function(){ go('admin'); });
   document.getElementById('hub-logout').addEventListener('click',function(){ localStorage.removeItem('gc:me'); S.user=null; go('login'); });
   document.querySelectorAll('.play-btn').forEach(function(btn){
     btn.addEventListener('click',function(){
@@ -492,10 +522,23 @@ function doSendInvite(){
   var invites=gsGet('gc:invites')||[];
   if(users.find(function(u){return u.email===e;})){ msgEl.innerHTML='<p class="err-msg">Already a member!</p>'; return; }
   if(invites.find(function(i){return i.email===e&&i.status==='pending';})){ msgEl.innerHTML='<p class="err-msg">Already invited!</p>'; return; }
-  gsSet('gc:invites',invites.concat([{email:e,by:S.user.email,byName:S.user.displayName,at:Date.now(),status:'pending'}]));
+  var inv={email:e,by:S.user.email,byName:S.user.displayName,at:Date.now(),status:'pending'};
+  gsSet('gc:invites',invites.concat([inv]));
   input.value='';
-  msgEl.innerHTML='<p class="ok-msg">&#10003; Invite sent to '+esc(e)+'!</p>';
-  setTimeout(function(){ go('invite'); },800);
+  var link=makeInviteLink(inv);
+  msgEl.innerHTML='<p class="ok-msg">&#10003; Invite created for '+esc(e)+'!</p>'
+    +'<div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;">'
+      +'<p style="font-size:11px;color:rgba(255,255,255,.4);margin:0 0 8px;font-family:Orbitron,monospace;letter-spacing:.08em">SHARE THIS LINK WITH '+esc(e).toUpperCase()+'</p>'
+      +'<div style="font-size:11px;color:#a78bfa;word-break:break-all;margin-bottom:10px">'+esc(link)+'</div>'
+      +'<button id="inv-copy" class="btn btn-ghost btn-full" style="padding:9px;font-size:12px">&#128203; Copy Link</button>'
+    +'</div>';
+  var copyBtn=document.getElementById('inv-copy');
+  if(copyBtn) copyBtn.addEventListener('click',function(){
+    navigator.clipboard.writeText(link).then(function(){
+      copyBtn.textContent='&#10003; Copied!'; copyBtn.style.color='#4ade80';
+    }).catch(function(){ copyBtn.textContent='Copy failed — select link above'; });
+  });
+  setTimeout(function(){ go('invite'); },8000);
 }
 
 /* ================================================================
@@ -507,13 +550,14 @@ function renderUpload(app){
     :'<div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:11px;font-family:Orbitron,monospace">UPLOADED GAMES</div>'
     +'<div style="display:flex;flex-direction:column;gap:9px">'
     +custom.map(function(g){
+      var canDelete=(S.user&&S.user.email===FOUNDER_EMAIL);
       return '<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 15px">'
         +'<span style="font-size:22px">'+g.emoji+'</span>'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-weight:600;font-size:14px">'+esc(g.name)+'</div>'
           +'<div style="font-size:11px;color:rgba(255,255,255,.3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.description)+'</div>'
         +'</div>'
-        +'<button class="btn btn-red del-btn" data-id="'+g.id+'" style="padding:7px 11px;font-size:13px;flex-shrink:0">&#128465;</button>'
+        +(canDelete?'<button class="btn btn-red del-btn" data-id="'+g.id+'" style="padding:7px 11px;font-size:13px;flex-shrink:0">&#128465;</button>':'')
       +'</div>';
     }).join('')+'</div>';
 
@@ -585,6 +629,141 @@ function processUpload(file){
     gsSet('gc:custom-games',updated); S.customGames=updated; S.scores[id]=[];
     if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added to the arcade!</div>';
     setTimeout(function(){ go('upload'); },900);
+  };
+  reader.readAsText(file);
+}
+
+/* ================================================================
+   SCREEN: ADMIN  (FOUNDER only — archive & restore)
+================================================================ */
+function renderAdmin(app){
+  if(!S.user||S.user.email!==FOUNDER_EMAIL){ go('hub'); return; }
+
+  app.innerHTML='<div class="screen" style="min-height:100vh;background:#07070f;padding-bottom:40px">'
+    +'<div style="background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 18px;display:flex;align-items:center;gap:12px">'
+      +'<button class="btn btn-ghost" id="adm-back" style="padding:7px 12px;font-size:13px">&#8592; Back</button>'
+      +'<div class="logo-font" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.5)">&#9881; ADMIN</div>'
+    +'</div>'
+    +'<div style="padding:18px;display:flex;flex-direction:column;gap:16px">'
+
+      // ── ARCHIVE
+      +'<div class="card">'
+        +'<div style="font-size:11px;color:#a78bfa;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128190; EXPORT ARCHIVE</div>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Downloads all Game Center data — users, invites, scores, and uploaded games — as a single JSON file. Use this before deploying a new version so you can restore everything.</p>'
+        +'<button class="btn btn-purple btn-full" id="adm-export" style="padding:13px;font-size:14px">&#11015; Download Archive</button>'
+        +'<div id="adm-export-msg" style="margin-top:10px"></div>'
+      +'</div>'
+
+      // ── RESTORE
+      +'<div class="card">'
+        +'<div style="font-size:11px;color:#38bdf8;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#11014; RESTORE FROM ARCHIVE</div>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Upload a previously downloaded archive JSON file to restore all data. <strong style="color:#f87171">This will overwrite all current data.</strong> After restoring, the page will reload.</p>'
+        +'<div id="adm-drop" style="border:2px dashed rgba(56,189,248,.25);border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color .2s">'
+          +'<div style="font-size:28px;margin-bottom:8px">&#128196;</div>'
+          +'<div style="font-weight:600;font-size:14px;margin-bottom:4px">Drop archive JSON here</div>'
+          +'<div style="font-size:12px;color:rgba(255,255,255,.3)">or click to browse</div>'
+          +'<input id="adm-file" type="file" accept=".json" style="display:none">'
+        +'</div>'
+        +'<div id="adm-restore-msg"></div>'
+      +'</div>'
+
+      // ── DANGER
+      +'<div class="card" style="border-color:rgba(248,113,113,.2);background:rgba(248,113,113,.04)">'
+        +'<div style="font-size:11px;color:#f87171;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#9888; DANGER ZONE</div>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Clear all Game Center data from this browser. Export an archive first if you want to keep records.</p>'
+        +'<button class="btn btn-red btn-full" id="adm-clear" style="padding:13px;font-size:14px">&#128465; Clear All Data</button>'
+        +'<div id="adm-clear-msg" style="margin-top:10px"></div>'
+      +'</div>'
+
+    +'</div>'
+  +'</div>';
+
+  document.getElementById('adm-back').addEventListener('click',function(){ go('hub'); });
+
+  // Export
+  document.getElementById('adm-export').addEventListener('click',function(){
+    var data={};
+    var keys=['gc:users','gc:invites','gc:custom-games'];
+    keys.forEach(function(k){ var v=gsGet(k); if(v) data[k]=v; });
+    // Collect all score keys
+    var games=allGames();
+    games.forEach(function(g){
+      var v=gsGet('gc:scores:'+g.id);
+      if(v&&v.length) data['gc:scores:'+g.id]=v;
+    });
+    // Also scan for any other score keys in localStorage
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&k.startsWith('gc:scores:')&&!data[k]){
+        var v2=gsGet(k); if(v2&&v2.length) data[k]=v2;
+      }
+    }
+    var archive={version:2,exportedAt:Date.now(),exportedBy:S.user.email,data:data};
+    var blob=new Blob([JSON.stringify(archive,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='gamecenter-archive-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    var msg=document.getElementById('adm-export-msg');
+    if(msg) msg.innerHTML='<p class="ok-msg">&#10003; Archive downloaded! Keep this file safe.</p>';
+  });
+
+  // Restore drop zone
+  var drop=document.getElementById('adm-drop');
+  var fileInput=document.getElementById('adm-file');
+  drop.addEventListener('click',function(){ fileInput.click(); });
+  drop.addEventListener('dragover',function(e){ e.preventDefault(); drop.style.borderColor='#38bdf8'; });
+  drop.addEventListener('dragleave',function(){ drop.style.borderColor='rgba(56,189,248,.25)'; });
+  drop.addEventListener('drop',function(e){
+    e.preventDefault(); drop.style.borderColor='rgba(56,189,248,.25)';
+    if(e.dataTransfer.files[0]) processRestore(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change',function(){ if(fileInput.files[0]) processRestore(fileInput.files[0]); });
+
+  // Clear all
+  document.getElementById('adm-clear').addEventListener('click',function(){
+    var msg=document.getElementById('adm-clear-msg');
+    if(document.getElementById('adm-clear').dataset.confirm==='yes'){
+      // Remove all gc: keys
+      var toRemove=[];
+      for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.startsWith('gc:')) toRemove.push(k); }
+      toRemove.forEach(function(k){ localStorage.removeItem(k); });
+      localStorage.removeItem('gc:me');
+      setTimeout(function(){ window.location.reload(); },600);
+    } else {
+      document.getElementById('adm-clear').dataset.confirm='yes';
+      document.getElementById('adm-clear').textContent='&#9888; Click again to confirm — this cannot be undone';
+      document.getElementById('adm-clear').style.background='linear-gradient(135deg,#7f1d1d,#991b1b)';
+      setTimeout(function(){
+        var btn=document.getElementById('adm-clear');
+        if(btn){ btn.dataset.confirm=''; btn.textContent='&#128465; Clear All Data'; btn.style.background=''; }
+      },5000);
+    }
+  });
+}
+
+function processRestore(file){
+  var msgEl=document.getElementById('adm-restore-msg');
+  if(!msgEl) return;
+  if(!file.name.endsWith('.json')){ msgEl.innerHTML='<p class="err-msg">Please select a .json archive file.</p>'; return; }
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try {
+      var archive=JSON.parse(ev.target.result);
+      if(!archive.data||archive.version<1) throw new Error('Invalid archive format');
+      var keys=Object.keys(archive.data);
+      keys.forEach(function(k){ gsSet(k,archive.data[k]); });
+      var d=archive.data['gc:users']||[];
+      var admin=d.find(function(u){return u.email===FOUNDER_EMAIL;});
+      if(admin) localStorage.setItem('gc:me',FOUNDER_EMAIL);
+      msgEl.innerHTML='<p class="ok-msg">&#10003; Restored '+keys.length+' data sets from archive exported on '
+        +new Date(archive.exportedAt).toLocaleDateString()+'. Reloading...</p>';
+      setTimeout(function(){ window.location.reload(); },1800);
+    } catch(e){
+      msgEl.innerHTML='<p class="err-msg">&#10060; Invalid archive file: '+esc(e.message)+'</p>';
+    }
   };
   reader.readAsText(file);
 }
