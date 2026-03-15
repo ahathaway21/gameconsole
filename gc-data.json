@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773601653952,
+  "updatedAt": 1773601658995,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -53,10 +53,40 @@
   "scores": {
     "custom-cat-blast-mms2fr2j": [
       {
+        "email": "mary.hathaway@gmail.com",
+        "displayName": "mary.hathaway",
+        "score": 2860,
+        "date": 1773600086256
+      },
+      {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 2450,
+        "date": 1773601653951
+      },
+      {
         "email": "ahathaway21@gmail.com",
         "displayName": "ahathaway21",
-        "score": 520,
-        "date": 1773598463654
+        "score": 2320,
+        "date": 1773598647163
+      },
+      {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 1320,
+        "date": 1773600448428
+      },
+      {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 1030,
+        "date": 1773600534108
+      },
+      {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 980,
+        "date": 1773600487360
       },
       {
         "email": "ahathaway21@gmail.com",
@@ -73,38 +103,8 @@
       {
         "email": "ahathaway21@gmail.com",
         "displayName": "ahathaway21",
-        "score": 2320,
-        "date": 1773598647163
-      },
-      {
-        "email": "mary.hathaway@gmail.com",
-        "displayName": "mary.hathaway",
-        "score": 2860,
-        "date": 1773600086256
-      },
-      {
-        "email": "hathawaynoaha@gmail.com",
-        "displayName": "hathawaynoaha",
-        "score": 1320,
-        "date": 1773600448428
-      },
-      {
-        "email": "hathawaynoaha@gmail.com",
-        "displayName": "hathawaynoaha",
-        "score": 980,
-        "date": 1773600487360
-      },
-      {
-        "email": "hathawaynoaha@gmail.com",
-        "displayName": "hathawaynoaha",
-        "score": 1030,
-        "date": 1773600534108
-      },
-      {
-        "email": "hathawaynoaha@gmail.com",
-        "displayName": "hathawaynoaha",
-        "score": 2450,
-        "date": 1773601653951
+        "score": 520,
+        "date": 1773598463654
       }
     ]
   },
