@@ -85,6 +85,121 @@ function gsGet(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):nu
 function gsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 
 /* ================================================================
+   GITHUB API  — all shared data lives in gc-data.json in the repo
+================================================================ */
+var GH = {
+  owner:'', repo:'', token:'',
+  configured: function(){ return !!(this.owner&&this.repo&&this.token); },
+  load: function(){
+    var c=gsGet('gc:gh-config');
+    if(c){ this.owner=c.owner||''; this.repo=c.repo||''; this.token=c.token||''; }
+  },
+  save: function(o,r,t){
+    this.owner=o; this.repo=r; this.token=t;
+    gsSet('gc:gh-config',{owner:o,repo:r,token:t});
+  }
+};
+GH.load();
+
+// Unicode-safe base64 encode
+function toB64(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+// Fetch gc-data.json from GitHub (public read, no auth needed)
+function ghRead(){
+  if(!GH.configured()) return Promise.resolve(null);
+  var url='https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/main/gc-data.json?t='+Date.now();
+  return fetch(url).then(function(r){ return r.ok?r.json():null; }).catch(function(){ return null; });
+}
+
+// Write gc-data.json to GitHub (requires PAT)
+function ghWrite(data){
+  if(!GH.configured()) return Promise.resolve(false);
+  var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-data.json';
+  var headers={'Authorization':'token '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+  // First get the current SHA
+  return fetch(apiUrl,{headers:headers})
+    .then(function(r){ return r.ok?r.json():null; })
+    .then(function(existing){
+      var body={message:'gc data update',content:toB64(JSON.stringify(data,null,2))};
+      if(existing&&existing.sha) body.sha=existing.sha;
+      return fetch(apiUrl,{method:'PUT',headers:headers,body:JSON.stringify(body)});
+    })
+    .then(function(r){ return r&&r.ok; })
+    .catch(function(){ return false; });
+}
+
+// Build the canonical data object from localStorage
+function buildGhData(){
+  var scores={};
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(k&&k.startsWith('gc:scores:')){ var v=gsGet(k); if(v&&v.length) scores[k.slice(10)]=v; }
+  }
+  // Store custom game metadata only (HTML too large for GitHub API)
+  var cgMeta=(gsGet('gc:custom-games')||[]).map(function(g){
+    return {id:g.id,name:g.name,emoji:g.emoji,description:g.description,bg:g.bg,accent:g.accent};
+  });
+  return {version:3,updatedAt:Date.now(),users:gsGet('gc:users')||[],
+          invites:gsGet('gc:invites')||[],scores:scores,customGamesMeta:cgMeta};
+}
+
+// Apply data from GitHub into localStorage
+function applyGhData(d){
+  if(!d) return;
+  // Only apply users if GitHub has actual data — never overwrite local with empty
+  if(d.users && d.users.length > 0){
+    var localUsers = gsGet('gc:users') || [];
+    // Merge: GitHub is source of truth for existing users, but keep any local-only users
+    var merged = d.users.slice();
+    localUsers.forEach(function(lu){
+      if(!merged.find(function(u){ return u.email === lu.email; })) merged.push(lu);
+    });
+    gsSet('gc:users', merged);
+  }
+  // Only apply invites if GitHub has data
+  if(d.invites && d.invites.length > 0){
+    var localInvites = gsGet('gc:invites') || [];
+    var mergedInv = d.invites.slice();
+    localInvites.forEach(function(li){
+      if(!mergedInv.find(function(i){ return i.email === li.email; })) mergedInv.push(li);
+    });
+    gsSet('gc:invites', mergedInv);
+  }
+  // Scores: merge all, GitHub wins on conflicts
+  if(d.scores){
+    Object.keys(d.scores).forEach(function(gid){
+      if(d.scores[gid] && d.scores[gid].length) gsSet('gc:scores:'+gid, d.scores[gid]);
+    });
+  }
+  // Custom game metadata
+  if(d.customGamesMeta && d.customGamesMeta.length){
+    var local=gsGet('gc:custom-games')||[];
+    var mergedGames=d.customGamesMeta.map(function(meta){
+      var local1=local.find(function(g){return g.id===meta.id;});
+      return local1?local1:Object.assign({html:'',builtin:false},meta);
+    });
+    local.forEach(function(g){
+      if(!mergedGames.find(function(m){return m.id===g.id;})) mergedGames.push(g);
+    });
+    gsSet('gc:custom-games',mergedGames);
+  }
+}
+
+// Pull from GitHub then continue — used at boot and login
+function syncFromGH(){
+  if(!GH.configured()) return Promise.resolve();
+  return ghRead().then(function(d){ applyGhData(d); });
+}
+
+// Push to GitHub — fire-and-forget after any data change
+function syncToGH(){
+  if(!GH.configured()) return;
+  ghWrite(buildGhData());
+}
+
+/* ================================================================
    CRYPTO  — SHA-256 password hashing
 ================================================================ */
 function hashPwd(pwd){
@@ -130,6 +245,7 @@ function submitScore(gameId,pts){
   var rank=-1;
   top5.forEach(function(s,i){ if(s.email===S.user.email&&s.score===pts) rank=i+1; });
   S.scores[gameId]=top5;
+  syncToGH();
   return {top5:top5,rank:rank};
 }
 
@@ -141,21 +257,25 @@ function checkInviteParam(){
     var params=new URLSearchParams(window.location.search);
     var raw=params.get('gc_invite');
     if(!raw) return;
-    var inv=JSON.parse(atob(raw));
+    var payload=JSON.parse(atob(raw));
+    // Support both old format (just invite obj) and new format ({inv, gh})
+    var inv=payload.inv||payload;
     if(!inv||!inv.email) return;
-    // Seed this browser's localStorage so doEmailNext finds the invite
+    // Seed GitHub config if included
+    if(payload.gh&&payload.gh.token) GH.save(payload.gh.owner,payload.gh.repo,payload.gh.token);
+    // Seed invite into localStorage
     var existing=gsGet('gc:invites')||[];
     var found=existing.find(function(i){return i.email===inv.email&&i.status==='pending';});
     if(!found) gsSet('gc:invites',existing.concat([inv]));
-    // Clean the URL without reloading
-    var clean=window.location.pathname;
-    window.history.replaceState({},'',clean);
+    window.history.replaceState({},'',window.location.pathname);
   } catch(e){}
 }
 
 function makeInviteLink(invObj){
+  var payload={inv:invObj};
+  if(GH.configured()) payload.gh={owner:GH.owner,repo:GH.repo,token:GH.token};
   var base=window.location.origin+window.location.pathname;
-  return base+'?gc_invite='+btoa(JSON.stringify(invObj));
+  return base+'?gc_invite='+btoa(JSON.stringify(payload));
 }
 
 /* ================================================================
@@ -189,17 +309,22 @@ function renderBoot(app){
   app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px">'
     +'<div class="logo-font" style="font-size:22px;font-weight:900;color:#a78bfa">GAME CENTER</div>'
     +'<div class="spinner"></div>'
+    +'<div id="boot-status" style="font-size:12px;color:rgba(255,255,255,.3);margin-top:4px">Starting...</div>'
     +'</div>';
   setTimeout(function(){
     checkInviteParam();
-    S.customGames=gsGet('gc:custom-games')||[];
-    var email=localStorage.getItem('gc:me');
-    var users=gsGet('gc:users')||[];
-    if(email){
-      var u=users.find(function(x){return x.email===email;});
-      if(u){ S.user=u; loadScores(); go('hub'); return; }
-    }
-    go('login');
+    var status=document.getElementById('boot-status');
+    if(status) status.textContent=GH.configured()?'Syncing with GitHub...':'Loading...';
+    syncFromGH().then(function(){
+      S.customGames=gsGet('gc:custom-games')||[];
+      var email=localStorage.getItem('gc:me');
+      var users=gsGet('gc:users')||[];
+      if(email){
+        var u=users.find(function(x){return x.email===email;});
+        if(u){ S.user=u; loadScores(); go('hub'); return; }
+      }
+      go('login');
+    });
   },300);
 }
 
@@ -317,6 +442,7 @@ function doCreate(){
     gsSet('gc:invites',newInvites);
     localStorage.setItem('gc:me',e);
     S.user=u; S.customGames=gsGet('gc:custom-games')||[]; loadScores();
+    syncToGH();
     LS={step:'email',email:'',err:''};
     go('hub');
   });
@@ -602,7 +728,9 @@ function renderUpload(app){
     btn.addEventListener('click',function(){
       var id=btn.dataset.id;
       var upd=(gsGet('gc:custom-games')||[]).filter(function(g){return g.id!==id;});
-      gsSet('gc:custom-games',upd); S.customGames=upd; delete S.scores[id]; go('upload');
+      gsSet('gc:custom-games',upd); S.customGames=upd; delete S.scores[id];
+      syncToGH();
+      go('upload');
     });
   });
 }
@@ -627,6 +755,7 @@ function processUpload(file){
     var existing=gsGet('gc:custom-games')||[];
     var updated=existing.filter(function(g){return g.id!==id;}).concat([gameData]);
     gsSet('gc:custom-games',updated); S.customGames=updated; S.scores[id]=[];
+    syncToGH();
     if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added to the arcade!</div>';
     setTimeout(function(){ go('upload'); },900);
   };
@@ -634,10 +763,28 @@ function processUpload(file){
 }
 
 /* ================================================================
-   SCREEN: ADMIN  (FOUNDER only — archive & restore)
+   SCREEN: ADMIN  (FOUNDER only)
 ================================================================ */
 function renderAdmin(app){
   if(!S.user||S.user.email!==FOUNDER_EMAIL){ go('hub'); return; }
+
+  var users=gsGet('gc:users')||[];
+  var ghConfigured=GH.configured();
+
+  var userRows=users.length===0
+    ?'<p style="color:rgba(255,255,255,.2);font-size:13px;text-align:center;padding:8px 0">No users yet.</p>'
+    :users.map(function(u){
+      var isFounder=(u.email===FOUNDER_EMAIL);
+      return '<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.displayName)+'</div>'
+          +'<div style="font-size:11px;color:rgba(255,255,255,.35)">'+esc(u.email)+'</div>'
+        +'</div>'
+        +(isFounder
+          ?'<span class="tag" style="background:rgba(167,139,250,.15);color:#a78bfa;flex-shrink:0">FOUNDER</span>'
+          :'<button class="btn btn-red del-user-btn" data-email="'+esc(u.email)+'" style="padding:6px 11px;font-size:12px;flex-shrink:0">&#128465; Remove</button>')
+      +'</div>';
+    }).join('');
 
   app.innerHTML='<div class="screen" style="min-height:100vh;background:#07070f;padding-bottom:40px">'
     +'<div style="background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 18px;display:flex;align-items:center;gap:12px">'
@@ -646,19 +793,50 @@ function renderAdmin(app){
     +'</div>'
     +'<div style="padding:18px;display:flex;flex-direction:column;gap:16px">'
 
+      // ── GITHUB SETUP
+      +'<div class="card" style="border-color:'+(ghConfigured?'rgba(74,222,128,.25)':'rgba(251,191,36,.25)')+';background:'+(ghConfigured?'rgba(74,222,128,.04)':'rgba(251,191,36,.04)')+'">'
+        +'<div style="font-size:11px;color:'+(ghConfigured?'#4ade80':'#fbbf24')+';font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128279; GITHUB SYNC '+(ghConfigured?'&#10003; CONNECTED':'&#9888; NOT SET UP')+'</div>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">'
+          +(ghConfigured
+            ?'Connected to <strong style="color:#f0f0ff">'+esc(GH.owner)+'/'+esc(GH.repo)+'</strong>. All user, invite, and score data syncs to <code style="font-size:11px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px">gc-data.json</code> in your repo. Invite links automatically share these credentials with new users.'
+            :'Connect your GitHub repo so all user accounts and scores are shared across every device. You\'ll need a GitHub Personal Access Token with <strong style="color:#f0f0ff">Contents: Read &amp; Write</strong> permission on this repo.')
+        +'</p>'
+        +(ghConfigured
+          ?'<div style="display:flex;gap:8px">'
+              +'<button class="btn btn-ghost btn-full" id="adm-gh-edit" style="padding:11px;font-size:13px">&#9998; Edit Config</button>'
+              +'<button class="btn btn-ghost btn-full" id="adm-gh-sync" style="padding:11px;font-size:13px">&#8635; Sync Now</button>'
+            +'</div>'
+          :'<div style="display:flex;flex-direction:column;gap:10px">'
+              +'<input class="inp" id="gh-owner" placeholder="GitHub username (e.g. ahathaway21)">'
+              +'<input class="inp" id="gh-repo" placeholder="Repository name (e.g. gamecenter)">'
+              +'<input class="inp" id="gh-token" type="password" placeholder="Personal Access Token (ghp_...)">'
+              +'<p style="font-size:11px;color:rgba(255,255,255,.3);margin:0;line-height:1.5">Create a token at github.com &#8594; Settings &#8594; Developer settings &#8594; Personal access tokens &#8594; Fine-grained. Give it Contents: Read &amp; Write on this repo only.</p>'
+              +'<div id="gh-setup-msg"></div>'
+              +'<button class="btn btn-purple btn-full" id="adm-gh-save" style="padding:12px;font-size:14px">&#128279; Connect GitHub</button>'
+            +'</div>')
+        +'<div id="gh-sync-msg" style="margin-top:8px"></div>'
+      +'</div>'
+
+      // ── USER MANAGEMENT
+      +'<div class="card">'
+        +'<div style="font-size:11px;color:#a78bfa;font-weight:600;margin-bottom:4px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128101; USERS ('+users.length+')</div>'
+        +'<div style="margin-top:8px">'+userRows+'</div>'
+        +'<div id="adm-user-msg" style="margin-top:10px"></div>'
+      +'</div>'
+
       // ── ARCHIVE
       +'<div class="card">'
-        +'<div style="font-size:11px;color:#a78bfa;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128190; EXPORT ARCHIVE</div>'
-        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Downloads all Game Center data — users, invites, scores, and uploaded games — as a single JSON file. Use this before deploying a new version so you can restore everything.</p>'
+        +'<div style="font-size:11px;color:#38bdf8;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128190; EXPORT ARCHIVE</div>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Downloads all data — users, invites, scores, uploaded games — as a JSON file. Use before deploying a new version.</p>'
         +'<button class="btn btn-purple btn-full" id="adm-export" style="padding:13px;font-size:14px">&#11015; Download Archive</button>'
         +'<div id="adm-export-msg" style="margin-top:10px"></div>'
       +'</div>'
 
       // ── RESTORE
       +'<div class="card">'
-        +'<div style="font-size:11px;color:#38bdf8;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#11014; RESTORE FROM ARCHIVE</div>'
-        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Upload a previously downloaded archive JSON file to restore all data. <strong style="color:#f87171">This will overwrite all current data.</strong> After restoring, the page will reload.</p>'
-        +'<div id="adm-drop" style="border:2px dashed rgba(56,189,248,.25);border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color .2s">'
+        +'<div style="font-size:11px;color:#f472b6;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#11014; RESTORE FROM ARCHIVE</div>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Upload a previously exported archive JSON. <strong style="color:#f87171">This overwrites all current data.</strong> Page will reload after restore.</p>'
+        +'<div id="adm-drop" style="border:2px dashed rgba(244,114,182,.25);border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color .2s">'
           +'<div style="font-size:28px;margin-bottom:8px">&#128196;</div>'
           +'<div style="font-weight:600;font-size:14px;margin-bottom:4px">Drop archive JSON here</div>'
           +'<div style="font-size:12px;color:rgba(255,255,255,.3)">or click to browse</div>'
@@ -670,8 +848,8 @@ function renderAdmin(app){
       // ── DANGER
       +'<div class="card" style="border-color:rgba(248,113,113,.2);background:rgba(248,113,113,.04)">'
         +'<div style="font-size:11px;color:#f87171;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#9888; DANGER ZONE</div>'
-        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Clear all Game Center data from this browser. Export an archive first if you want to keep records.</p>'
-        +'<button class="btn btn-red btn-full" id="adm-clear" style="padding:13px;font-size:14px">&#128465; Clear All Data</button>'
+        +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">Clear all local Game Center data. Export an archive first.</p>'
+        +'<button class="btn btn-red btn-full" id="adm-clear" style="padding:13px;font-size:14px">&#128465; Clear All Local Data</button>'
         +'<div id="adm-clear-msg" style="margin-top:10px"></div>'
       +'</div>'
 
@@ -680,66 +858,115 @@ function renderAdmin(app){
 
   document.getElementById('adm-back').addEventListener('click',function(){ go('hub'); });
 
+  // GitHub setup
+  var ghSaveBtn=document.getElementById('adm-gh-save');
+  if(ghSaveBtn){
+    ghSaveBtn.addEventListener('click',function(){
+      var o=(document.getElementById('gh-owner').value||'').trim();
+      var r=(document.getElementById('gh-repo').value||'').trim();
+      var t=(document.getElementById('gh-token').value||'').trim();
+      var msgEl=document.getElementById('gh-setup-msg');
+      if(!o||!r||!t){ msgEl.innerHTML='<p class="err-msg">All three fields are required.</p>'; return; }
+      if(!t.startsWith('ghp_')&&!t.startsWith('github_pat_')){ msgEl.innerHTML='<p class="err-msg">Token should start with ghp_ or github_pat_</p>'; return; }
+      ghSaveBtn.textContent='Testing...'; ghSaveBtn.disabled=true;
+      // Test the token with a read of the repo
+      fetch('https://api.github.com/repos/'+o+'/'+r,{headers:{'Authorization':'token '+t,'Accept':'application/vnd.github.v3+json'}})
+        .then(function(res){
+          if(!res.ok) throw new Error('Repo not found or token invalid (status '+res.status+')');
+          GH.save(o,r,t);
+          return ghWrite(buildGhData());
+        })
+        .then(function(ok){
+          if(!ok) throw new Error('Could not write to gc-data.json. Check token has Contents:Write permission.');
+          renderAdmin(app);
+        })
+        .catch(function(err){
+          if(msgEl) msgEl.innerHTML='<p class="err-msg">&#10060; '+esc(err.message)+'</p>';
+          ghSaveBtn.textContent='&#128279; Connect GitHub'; ghSaveBtn.disabled=false;
+        });
+    });
+  }
+
+  var ghEditBtn=document.getElementById('adm-gh-edit');
+  if(ghEditBtn) ghEditBtn.addEventListener('click',function(){ GH.save('','',''); renderAdmin(app); });
+
+  var ghSyncBtn=document.getElementById('adm-gh-sync');
+  if(ghSyncBtn){
+    ghSyncBtn.addEventListener('click',function(){
+      var msg=document.getElementById('gh-sync-msg');
+      ghSyncBtn.textContent='Syncing...'; ghSyncBtn.disabled=true;
+      ghWrite(buildGhData()).then(function(ok){
+        ghSyncBtn.textContent='&#8635; Sync Now'; ghSyncBtn.disabled=false;
+        if(msg) msg.innerHTML=ok?'<p class="ok-msg">&#10003; Synced successfully.</p>':'<p class="err-msg">Sync failed. Check your token.</p>';
+      });
+    });
+  }
+
+  // Delete user
+  document.querySelectorAll('.del-user-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var email=btn.dataset.email;
+      var msgEl=document.getElementById('adm-user-msg');
+      if(btn.dataset.confirm==='yes'){
+        var users2=gsGet('gc:users')||[];
+        var updated=users2.filter(function(u){return u.email!==email;});
+        gsSet('gc:users',updated);
+        // Also clear their pending invites
+        var invites=gsGet('gc:invites')||[];
+        gsSet('gc:invites',invites.filter(function(i){return i.by!==email;}));
+        syncToGH();
+        if(msgEl) msgEl.innerHTML='<p class="ok-msg">&#10003; '+esc(email)+' removed.</p>';
+        setTimeout(function(){ renderAdmin(app); },1200);
+      } else {
+        btn.dataset.confirm='yes';
+        btn.textContent='Confirm?';
+        btn.style.background='linear-gradient(135deg,#7f1d1d,#991b1b)';
+        setTimeout(function(){ btn.dataset.confirm=''; btn.textContent='&#128465; Remove'; btn.style.background=''; },4000);
+      }
+    });
+  });
+
   // Export
   document.getElementById('adm-export').addEventListener('click',function(){
     var data={};
-    var keys=['gc:users','gc:invites','gc:custom-games'];
+    var keys=['gc:users','gc:invites','gc:custom-games','gc:gh-config'];
     keys.forEach(function(k){ var v=gsGet(k); if(v) data[k]=v; });
-    // Collect all score keys
-    var games=allGames();
-    games.forEach(function(g){
-      var v=gsGet('gc:scores:'+g.id);
-      if(v&&v.length) data['gc:scores:'+g.id]=v;
-    });
-    // Also scan for any other score keys in localStorage
     for(var i=0;i<localStorage.length;i++){
       var k=localStorage.key(i);
-      if(k&&k.startsWith('gc:scores:')&&!data[k]){
-        var v2=gsGet(k); if(v2&&v2.length) data[k]=v2;
-      }
+      if(k&&k.startsWith('gc:scores:')&&!data[k]){ var v2=gsGet(k); if(v2&&v2.length) data[k]=v2; }
     }
-    var archive={version:2,exportedAt:Date.now(),exportedBy:S.user.email,data:data};
+    var archive={version:3,exportedAt:Date.now(),exportedBy:S.user.email,data:data};
     var blob=new Blob([JSON.stringify(archive,null,2)],{type:'application/json'});
     var url=URL.createObjectURL(blob);
     var a=document.createElement('a');
-    a.href=url;
-    a.download='gamecenter-archive-'+new Date().toISOString().slice(0,10)+'.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    a.href=url; a.download='gamecenter-archive-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     var msg=document.getElementById('adm-export-msg');
-    if(msg) msg.innerHTML='<p class="ok-msg">&#10003; Archive downloaded! Keep this file safe.</p>';
+    if(msg) msg.innerHTML='<p class="ok-msg">&#10003; Archive downloaded!</p>';
   });
 
-  // Restore drop zone
+  // Restore
   var drop=document.getElementById('adm-drop');
   var fileInput=document.getElementById('adm-file');
   drop.addEventListener('click',function(){ fileInput.click(); });
-  drop.addEventListener('dragover',function(e){ e.preventDefault(); drop.style.borderColor='#38bdf8'; });
-  drop.addEventListener('dragleave',function(){ drop.style.borderColor='rgba(56,189,248,.25)'; });
-  drop.addEventListener('drop',function(e){
-    e.preventDefault(); drop.style.borderColor='rgba(56,189,248,.25)';
-    if(e.dataTransfer.files[0]) processRestore(e.dataTransfer.files[0]);
-  });
+  drop.addEventListener('dragover',function(e){ e.preventDefault(); drop.style.borderColor='#f472b6'; });
+  drop.addEventListener('dragleave',function(){ drop.style.borderColor='rgba(244,114,182,.25)'; });
+  drop.addEventListener('drop',function(e){ e.preventDefault(); drop.style.borderColor='rgba(244,114,182,.25)'; if(e.dataTransfer.files[0]) processRestore(e.dataTransfer.files[0]); });
   fileInput.addEventListener('change',function(){ if(fileInput.files[0]) processRestore(fileInput.files[0]); });
 
-  // Clear all
+  // Clear
   document.getElementById('adm-clear').addEventListener('click',function(){
-    var msg=document.getElementById('adm-clear-msg');
-    if(document.getElementById('adm-clear').dataset.confirm==='yes'){
-      // Remove all gc: keys
+    var btn=document.getElementById('adm-clear');
+    if(btn.dataset.confirm==='yes'){
       var toRemove=[];
       for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.startsWith('gc:')) toRemove.push(k); }
       toRemove.forEach(function(k){ localStorage.removeItem(k); });
       localStorage.removeItem('gc:me');
       setTimeout(function(){ window.location.reload(); },600);
     } else {
-      document.getElementById('adm-clear').dataset.confirm='yes';
-      document.getElementById('adm-clear').textContent='&#9888; Click again to confirm — this cannot be undone';
-      document.getElementById('adm-clear').style.background='linear-gradient(135deg,#7f1d1d,#991b1b)';
-      setTimeout(function(){
-        var btn=document.getElementById('adm-clear');
-        if(btn){ btn.dataset.confirm=''; btn.textContent='&#128465; Clear All Data'; btn.style.background=''; }
-      },5000);
+      btn.dataset.confirm='yes'; btn.textContent='&#9888; Click again to confirm';
+      btn.style.background='linear-gradient(135deg,#7f1d1d,#991b1b)';
+      setTimeout(function(){ if(btn){ btn.dataset.confirm=''; btn.textContent='&#128465; Clear All Local Data'; btn.style.background=''; } },5000);
     }
   });
 }
@@ -755,10 +982,14 @@ function processRestore(file){
       if(!archive.data||archive.version<1) throw new Error('Invalid archive format');
       var keys=Object.keys(archive.data);
       keys.forEach(function(k){ gsSet(k,archive.data[k]); });
+      // Re-load GH config if it was in the archive
+      GH.load();
       var d=archive.data['gc:users']||[];
       var admin=d.find(function(u){return u.email===FOUNDER_EMAIL;});
       if(admin) localStorage.setItem('gc:me',FOUNDER_EMAIL);
-      msgEl.innerHTML='<p class="ok-msg">&#10003; Restored '+keys.length+' data sets from archive exported on '
+      // Push restored data to GitHub
+      syncToGH();
+      msgEl.innerHTML='<p class="ok-msg">&#10003; Restored '+keys.length+' data sets from '
         +new Date(archive.exportedAt).toLocaleDateString()+'. Reloading...</p>';
       setTimeout(function(){ window.location.reload(); },1800);
     } catch(e){
