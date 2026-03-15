@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>The Crimson Cipher</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Libre+Baskerville:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#050510;--surface:#0f0f1e;--surface2:#18182a;
+  --gold:#c9a84c;--gold-l:#f0d080;--gold-d:rgba(201,168,76,0.22);
+  --crimson:#8b1818;--crimson-b:#dc3535;
+  --text:#e8dcc8;--text-dim:#9a8a70;
+  --ts:44px;--tg:2px;--stride:46px;
+}
+body{
+  background:radial-gradient(ellipse at 25% 15%,#14083a 0%,var(--bg) 55%),radial-gradient(ellipse at 80% 80%,#200a0a 0%,transparent 50%);
+  color:var(--text);font-family:'Libre Baskerville','Georgia',serif;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:10px 8px 30px;
+}
+h1{font-family:'Playfair Display',serif;font-size:2.1rem;font-weight:900;color:var(--gold);
+   letter-spacing:4px;text-align:center;text-shadow:0 0 40px rgba(201,168,76,0.45);line-height:1;}
+.subtitle{font-size:.65rem;letter-spacing:5px;text-transform:uppercase;color:var(--text-dim);text-align:center;margin-top:3px;}
+.sep{width:50px;height:1px;background:var(--gold-d);margin:10px auto;}
+
+/* Stats row */
+.stats-row{display:flex;gap:5px;width:100%;max-width:360px;margin:9px 0 5px;}
+.stat{flex:1;background:var(--surface);border:1px solid var(--gold-d);border-radius:8px;padding:5px 3px;text-align:center;}
+.stat-label{font-size:.52rem;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;}
+.stat-value{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:var(--gold);}
+#lives-val{font-size:.78rem;letter-spacing:1px;}
+
+/* Streak row */
+.streak-row{display:flex;align-items:center;justify-content:space-between;
+  width:100%;max-width:360px;background:var(--surface);border:1px solid var(--gold-d);
+  border-radius:8px;padding:6px 11px;margin-bottom:5px;}
+.streak-left{display:flex;align-items:center;gap:7px;}
+.streak-label{font-size:.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;}
+.streak-count{font-family:'Playfair Display',serif;font-size:1.05rem;color:#f06030;font-weight:700;}
+.streak-dots{display:flex;gap:3px;margin-top:3px;}
+.sdot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.1);transition:background .3s;}
+.sdot.lit{background:var(--gold);}
+.daily-btn{background:linear-gradient(135deg,var(--crimson),var(--crimson-b));border:1px solid rgba(220,53,53,.5);
+  color:#fff;border-radius:6px;padding:5px 11px;cursor:pointer;font-family:'Playfair Display',serif;
+  font-size:.8rem;transition:all .2s;}
+.daily-btn:hover{filter:brightness(1.2);transform:scale(1.04);}
+.daily-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+.daily-timer{font-size:.55rem;color:var(--text-dim);margin-top:2px;text-align:right;}
+
+/* Progress bars */
+.bars{width:100%;max-width:360px;margin-bottom:7px;}
+.bar-row{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+.bar-lbl{font-size:.52rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;width:26px;}
+.bar-bg{flex:1;background:rgba(255,255,255,.05);border-radius:8px;height:6px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:8px;transition:width .45s ease;}
+.xp-fill{background:linear-gradient(90deg,var(--gold),var(--gold-l));box-shadow:0 0 5px var(--gold);}
+.goal-fill{background:linear-gradient(90deg,var(--crimson),var(--crimson-b));box-shadow:0 0 5px var(--crimson-b);}
+.bar-end{font-size:.58rem;color:var(--text-dim);min-width:28px;text-align:right;}
+
+/* Grid */
+.grid-wrap{position:relative;padding:7px;background:#08081a;
+  border:2px solid var(--gold-d);border-radius:12px;
+  box-shadow:0 0 35px rgba(0,0,0,.65),inset 0 0 20px rgba(0,0,0,.4);
+  margin-bottom:8px;}
+#grid{display:grid;grid-template-columns:repeat(7,var(--ts));grid-template-rows:repeat(7,var(--ts));
+  gap:var(--tg);position:relative;}
+.tile{width:var(--ts);height:var(--ts);border-radius:7px;display:flex;align-items:center;justify-content:center;
+  font-size:19px;cursor:pointer;border:1px solid transparent;user-select:none;
+  position:relative;z-index:1;transition:transform .08s;}
+.tile span{pointer-events:none;}
+.tile:active{transform:scale(.94);}
+.tile.selected{z-index:3;animation:tpulse .55s ease-in-out infinite alternate;}
+@keyframes tpulse{
+  from{box-shadow:0 0 0 2px #fff,0 0 10px rgba(255,255,255,.3);}
+  to{box-shadow:0 0 0 2px var(--gold-l),0 0 18px rgba(240,208,128,.5);}
+}
+.tile.matched{animation:tpop .38s ease-out forwards;z-index:2;}
+@keyframes tpop{
+  0%{transform:scale(1);opacity:1;}
+  35%{transform:scale(1.28);opacity:.75;filter:brightness(1.7);}
+  100%{transform:scale(0);opacity:0;}
+}
+.tile.new-tile{animation:tdrop .3s ease-out;}
+@keyframes tdrop{
+  0%{transform:translateY(-44px) scale(.8);opacity:0;}
+  65%{transform:translateY(3px);}
+  100%{transform:translateY(0) scale(1);opacity:1;}
+}
+.tile.shake{animation:tshake .32s ease-in-out;}
+@keyframes tshake{
+  0%,100%{transform:translateX(0);}
+  20%{transform:translateX(-5px);}
+  60%{transform:translateX(5px);}
+  80%{transform:translateX(-3px);}
+}
+.tile.t-empty{background:rgba(255,255,255,.02);border-color:rgba(255,255,255,.04);}
+.t0{background:linear-gradient(135deg,#0b2038,#142d4e);border-color:#3a6ba0;color:#7ab8f5;}
+.t1{background:linear-gradient(135deg,#1e1400,#332200);border-color:#a07828;color:#f0d080;}
+.t2{background:linear-gradient(135deg,#1e0e00,#312000);border-color:#a0581e;color:#f0a060;}
+.t3{background:linear-gradient(135deg,#081e08,#0d2e0d);border-color:#2e7a2e;color:#80c880;}
+.t4{background:linear-gradient(135deg,#120820,#1e1035);border-color:#6a3aaa;color:#b880f0;}
+.te{background:linear-gradient(135deg,#082018,#0e3820);border-color:#28b878;color:#60f0a0;
+    animation:teglow 1.2s ease-in-out infinite alternate;}
+@keyframes teglow{
+  from{box-shadow:0 0 6px rgba(40,184,120,.3);}
+  to{box-shadow:0 0 16px rgba(40,184,120,.65),0 0 4px rgba(40,184,120,.3);}
+}
+
+/* Evidence panel */
+.evidence-panel{width:100%;max-width:360px;background:var(--surface);
+  border:1px solid var(--gold-d);border-radius:8px;padding:8px 11px;margin-bottom:7px;}
+.ev-label{font-size:.55rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;}
+.ev-slots{display:flex;gap:7px;}
+.ev-slot{flex:1;height:30px;border:1px dashed rgba(201,168,76,.2);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.68rem;color:rgba(154,138,112,.5);transition:all .3s;}
+.ev-slot.filled{background:linear-gradient(135deg,#082018,#0e3820);border:1px solid #28b878;
+  color:#60f0a0;font-size:17px;animation:slotfill .4s ease-out;}
+@keyframes slotfill{0%{transform:scale(.8);opacity:0;}60%{transform:scale(1.15);}100%{transform:scale(1);opacity:1;}}
+
+/* Leaderboard */
+.leaderboard{width:100%;max-width:360px;background:var(--surface);
+  border:1px solid var(--gold-d);border-radius:8px;padding:8px 11px;margin-bottom:10px;}
+.lb-head{font-size:.55rem;color:var(--gold);text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:6px;display:flex;justify-content:space-between;}
+.lb-row{display:flex;align-items:center;padding:3px 0;font-size:.8rem;
+  border-bottom:1px solid rgba(255,255,255,.04);}
+.lb-row:last-child{border-bottom:none;}
+.lb-rank{width:18px;color:var(--text-dim);font-size:.7rem;}
+.lb-name{flex:1;}
+.lb-score{font-family:'Playfair Display',serif;color:var(--gold);}
+.lb-row.you{background:rgba(201,168,76,.06);border-radius:4px;padding:3px 4px;}
+
+/* Score popup */
+.score-popup{position:absolute;left:50%;top:33%;z-index:50;pointer-events:none;
+  font-family:'Playfair Display',serif;font-size:1.7rem;font-weight:900;
+  color:var(--gold-l);text-shadow:0 0 14px rgba(201,168,76,.85),0 2px 5px rgba(0,0,0,.9);
+  white-space:nowrap;animation:sfloat 1s ease-out forwards;}
+@keyframes sfloat{
+  0%{transform:translateX(-50%) scale(.9);opacity:0;}
+  15%{transform:translateX(-50%) translateY(-8px) scale(1.1);opacity:1;}
+  100%{transform:translateX(-50%) translateY(-72px) scale(1);opacity:0;}
+}
+
+/* Achievement toast */
+.toast{position:fixed;top:16px;right:16px;background:var(--surface);
+  border:1px solid var(--gold);border-radius:10px;padding:10px 13px;
+  display:flex;align-items:center;gap:9px;max-width:230px;z-index:999;
+  box-shadow:0 4px 22px rgba(0,0,0,.55),0 0 22px rgba(201,168,76,.12);
+  animation:tin .35s ease-out;}
+@keyframes tin{from{transform:translateX(250px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes tout{from{transform:translateX(0);opacity:1;}to{transform:translateX(250px);opacity:0;}}
+.toast-icon{font-size:22px;flex-shrink:0;}
+.toast-title{font-size:.55rem;color:var(--gold);text-transform:uppercase;letter-spacing:1px;}
+.toast-name{font-family:'Playfair Display',serif;font-size:.9rem;color:var(--text);}
+.toast-desc{font-size:.7rem;color:var(--text-dim);}
+
+/* Modals */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.87);
+  display:flex;align-items:center;justify-content:center;z-index:500;
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
+.modal{background:var(--surface);border:2px solid var(--gold-d);border-radius:16px;
+  padding:28px 22px;max-width:310px;width:92%;text-align:center;
+  box-shadow:0 0 60px rgba(0,0,0,.8),0 0 40px rgba(201,168,76,.07);}
+.modal-title{font-family:'Playfair Display',serif;font-size:1.45rem;color:var(--gold);margin-bottom:6px;}
+.modal-text{font-size:.88rem;color:var(--text-dim);line-height:1.7;font-style:italic;margin-bottom:18px;}
+.modal-btns{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;}
+.lvl-badge{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--crimson),var(--crimson-b));
+  display:flex;align-items:center;justify-content:center;font-size:1.9rem;
+  margin:0 auto 14px;box-shadow:0 0 22px rgba(220,53,53,.4);}
+.btn{background:linear-gradient(135deg,var(--crimson),var(--crimson-b));border:1px solid rgba(220,53,53,.5);
+  color:#fff;border-radius:8px;padding:9px 20px;cursor:pointer;font-family:'Playfair Display',serif;
+  font-size:.9rem;letter-spacing:.5px;transition:all .2s;}
+.btn:hover{filter:brightness(1.2);transform:scale(1.03);}
+.btn.gold{background:linear-gradient(135deg,#5a4010,var(--gold));border-color:var(--gold);color:#1a1000;}
+.modal strong{color:var(--gold);}
+.hidden{display:none!important;}
+</style>
+</head>
+<body>
+
+<div style="margin-bottom:5px;text-align:center;padding-top:6px;">
+  <h1>THE CRIMSON CIPHER</h1>
+  <div class="subtitle">A Detective Match-3 Mystery</div>
+</div>
+
+<div class="stats-row">
+  <div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score-val">0</div></div>
+  <div class="stat"><div class="stat-label">Case</div><div class="stat-value" id="level-val">1</div></div>
+  <div class="stat"><div class="stat-label">Moves</div><div class="stat-value" id="moves-val">25</div></div>
+  <div class="stat"><div class="stat-label">Lives</div><div class="stat-value" id="lives-val">♥♥♥♥♥</div></div>
+</div>
+
+<div class="streak-row">
+  <div class="streak-left">
+    <div style="font-size:20px;">🔥</div>
+    <div>
+      <div class="streak-label">Detective Streak</div>
+      <div><span class="streak-count" id="streak-val">0</span><span style="font-size:.7rem;color:var(--text-dim)"> days</span></div>
+      <div class="streak-dots" id="streak-dots"></div>
+    </div>
+  </div>
+  <div style="text-align:right;">
+    <button class="daily-btn" id="daily-btn" onclick="claimDaily()">Claim Daily</button>
+    <div class="daily-timer" id="daily-timer"></div>
+  </div>
+</div>
+
+<div class="bars">
+  <div class="bar-row">
+    <div class="bar-lbl">XP</div>
+    <div class="bar-bg"><div class="bar-fill xp-fill" id="xp-bar" style="width:0%"></div></div>
+    <div class="bar-end" id="xp-end">Lv 1</div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-lbl">Goal</div>
+    <div class="bar-bg"><div class="bar-fill goal-fill" id="goal-bar" style="width:0%"></div></div>
+    <div class="bar-end" id="goal-end">0%</div>
+  </div>
+</div>
+
+<div class="grid-wrap" id="grid-wrap">
+  <div id="grid"></div>
+</div>
+
+<div class="evidence-panel">
+  <div class="ev-label">Evidence Collected — Tap <span style="color:#60f0a0">🌿</span> tiles to collect</div>
+  <div class="ev-slots" id="ev-slots">
+    <div class="ev-slot" id="ev0">Tap 🌿</div>
+    <div class="ev-slot" id="ev1">Tap 🌿</div>
+    <div class="ev-slot" id="ev2">Tap 🌿</div>
+  </div>
+</div>
+
+<div class="leaderboard">
+  <div class="lb-head"><span>Top Detectives</span><span id="lb-case">Case 1</span></div>
+  <div id="lb-list"></div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<script>
+// ─── CONSTANTS ──────────────────────────────────────────────
+const GS = 7, TYPES = 5, EV_TYPE = 5, EV_CHANCE = .045, EV_NEED = 3, STRIDE = 46;
+
+const TD = [
+  {e:'🔍',l:'Clue'},{e:'🗝️',l:'Key'},{e:'🕯️',l:'Candle'},{e:'📜',l:'Scroll'},{e:'🔮',l:'Crystal'}
+];
+
+const LEVELS = [
+  {goal:600,  moves:25,story:"The vault stands open — its lock shattered from within. A faint scent of roses. Someone wanted you to find this."},
+  {goal:1200, moves:23,story:"A monogrammed glove near the window. Initials: R.V. Your best informant goes silent that same night."},
+  {goal:2200, moves:21,story:"The Crimson Cipher: an ancient decoder that no modern algorithm can crack. Governments have killed for less."},
+  {goal:3500, moves:20,story:"Lady Voss. Socialite. Philanthropist. The city whispers she holds secrets that could topple a dynasty."},
+  {goal:5200, moves:19,story:"Her mansion is a labyrinth. Every painting hides a clue. Every smile conceals a calculated betrayal."},
+  {goal:7200, moves:18,story:"A second Cipher exists. Someone has been two steps ahead of you — watching from the very start."},
+  {goal:9800, moves:17,story:"A traitor in your department. Every move you made was fed to the enemy. You've been hunting blind."},
+  {goal:13000,moves:16,story:"Midnight at the docks. The exchange is imminent. You have one chance to stop the handoff."},
+  {goal:17000,moves:16,story:"The mastermind steps into the light. You've crossed paths before. You just didn't know it then."},
+  {goal:22000,moves:15,story:"The Crimson Cipher doesn't decode messages. It unlocks a vault containing evidence that could bring down an empire. Case closed."},
+];
+
+const ACHV = [
+  {id:'first',  i:'👁️',t:'Sharp Eye',     d:'Made your first match'},
+  {id:'cascade',i:'⛓️',t:'Chain Reaction',d:'Triggered a triple cascade!'},
+  {id:'evidence',i:'📁',t:'First Clue',    d:'Collected your first evidence'},
+  {id:'big5',   i:'💫',t:'Magnificent',   d:'Matched 5+ tiles at once!'},
+  {id:'lv5',    i:'🕵️',t:'Half Truth',    d:'Reached Case 5'},
+  {id:'lv10',   i:'🏆',t:'Case Closed',   d:'Solved The Crimson Cipher!'},
+  {id:'streak3',i:'🔥',t:'Devoted',       d:'3-day detective streak!'},
+  {id:'10k',    i:'⭐',t:'Master Sleuth', d:'Scored 10,000+ total points'},
+];
+
+const FAKE_LB = [
+  {n:'Inspector Crane',s:35200},{n:'Agent Harrow',s:27600},
+  {n:'Mx. Vance',s:19400},{n:'Detective Rue',s:12800},{n:'Constable Gray',s:6500}
+];
+
+// ─── STATE ──────────────────────────────────────────────────
+let grid=[], cellEls=[], newIds=new Set(), uid=0;
+let score=0,levelIdx=0,movesLeft=0,evCount=0;
+let selCell=null,animLock=false,firstMatchDone=false;
+let shakeCells=new Set();
+let totalScore=0,playerXP=0,playerLv=1,streak=0,lives=5;
+let dailyClaimed=false,unlockedA=new Set();
+
+// ─── STORAGE ────────────────────────────────────────────────
+const ls=(k)=>localStorage.getItem(k);
+const ss=(k,v)=>localStorage.setItem(k,v);
+function loadData(){
+  try{
+    totalScore=+ls('cc_ts')||0; playerXP=+ls('cc_xp')||0;
+    playerLv=+ls('cc_pl')||1; streak=+ls('cc_sk')||0;
+    lives=+ls('cc_lv')||5; levelIdx=+ls('cc_li')||0;
+    const a=ls('cc_ac'); if(a)unlockedA=new Set(JSON.parse(a));
+    const today=new Date().toDateString();
+    const lastDay=ls('cc_ld')||'';
+    dailyClaimed=(ls('cc_dc')===today);
+    if(lastDay&&lastDay!==today){
+      const diff=Math.round((new Date(today)-new Date(lastDay))/86400000);
+      if(diff===1){streak++;if(streak>=3)unlockA('streak3');}
+      else if(diff>1)streak=1;
+    }else if(!lastDay)streak=1;
+    saveData();
+  }catch(e){}
+}
+function saveData(){
+  try{
+    ss('cc_ts',totalScore);ss('cc_xp',playerXP);ss('cc_pl',playerLv);
+    ss('cc_sk',streak);ss('cc_lv',lives);ss('cc_li',levelIdx);
+    ss('cc_ld',new Date().toDateString());
+    ss('cc_ac',JSON.stringify([...unlockedA]));
+  }catch(e){}
+}
+
+// ─── AUDIO ──────────────────────────────────────────────────
+let actx;
+function getCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();return actx;}
+function tone(f,dur=.15,type='sine',vol=.18){
+  try{const c=getCtx(),o=c.createOscillator(),g=c.createGain();
+    o.connect(g);g.connect(c.destination);o.type=type;o.frequency.value=f;
+    g.gain.setValueAtTime(vol,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,c.currentTime+dur);
+    o.start();o.stop(c.currentTime+dur+.01);}catch(e){}
+}
+function sndMatch(n,cas=0){
+  const b=440+cas*55;
+  const ff=n>=5?[b,b*1.25,b*1.5,b*2]:n>=4?[b,b*1.25,b*1.5]:[b,b*1.25];
+  ff.forEach((f,i)=>setTimeout(()=>tone(f,.18,'sine',.17),i*55));
+}
+function sndEvidence(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.25,'sine',.2),i*85));}
+function sndLevelUp(){[523,587,659,784,880,1047,1319].forEach((f,i)=>setTimeout(()=>tone(f,.2,'sine',.16),i*70));}
+function sndInvalid(){tone(160,.12,'square',.12);}
+function sndSelect(){tone(660,.07,'sine',.09);}
+function sndAchv(){[880,1100].forEach((f,i)=>setTimeout(()=>tone(f,.25,'sine',.18),i*140));}
+function sndDaily(){[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.2,'sine',.18),i*90));}
+
+// ─── GRID CORE ──────────────────────────────────────────────
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+function rndType(){return Math.random()<EV_CHANCE?EV_TYPE:Math.floor(Math.random()*TYPES);}
+
+function initGrid(){
+  grid=[];
+  for(let r=0;r<GS;r++){grid[r]=[];for(let c=0;c<GS;c++)grid[r][c]={t:rndType(),id:uid++};}
+  let tries=0;
+  while(findMatches().size>0&&tries<40){
+    for(let r=0;r<GS;r++)for(let c=0;c<GS;c++)grid[r][c]={t:rndType(),id:uid++};
+    tries++;
+  }
+}
+
+function findMatches(){
+  const f=new Set();
+  for(let r=0;r<GS;r++){
+    let c=0;while(c<GS){
+      const t=grid[r][c].t;if(t<0||t>=TYPES){c++;continue;}
+      let e=c+1;while(e<GS&&grid[r][e].t===t)e++;
+      if(e-c>=3)for(let i=c;i<e;i++)f.add(r+','+i);
+      c=e;
+    }
+  }
+  for(let c=0;c<GS;c++){
+    let r=0;while(r<GS){
+      const t=grid[r][c].t;if(t<0||t>=TYPES){r++;continue;}
+      let e=r+1;while(e<GS&&grid[e][c].t===t)e++;
+      if(e-r>=3)for(let i=r;i<e;i++)f.add(i+','+c);
+      r=e;
+    }
+  }
+  return f;
+}
+
+function applyGravity(){
+  for(let c=0;c<GS;c++){
+    let w=GS-1;
+    for(let r=GS-1;r>=0;r--){
+      if(grid[r][c].t!==-1){
+        if(w!==r){grid[w][c]=grid[r][c];grid[r][c]={t:-1,id:uid++};}
+        w--;
+      }
+    }
+    while(w>=0){
+      const nt={t:rndType(),id:uid++};
+      newIds.add(nt.id);grid[w][c]=nt;w--;
+    }
+  }
+}
+
+async function processMatches(){
+  let cas=0;
+  while(true){
+    const m=findMatches();if(m.size===0)break;
+    const keys=[...m];
+    keys.forEach(k=>{const[r,c]=k.split(',').map(Number);cellEls[r][c].classList.add('matched');});
+    const multi=1+cas*.55;
+    const pts=Math.floor(keys.length*65*multi);
+    score+=pts;totalScore+=pts;
+    showScorePop(pts,cas);
+    sndMatch(keys.length,cas);
+    if(!firstMatchDone){firstMatchDone=true;unlockA('first');}
+    if(keys.length>=5)unlockA('big5');
+    if(cas>=2)unlockA('cascade');
+    if(totalScore>=10000)unlockA('10k');
+    await delay(390);
+    keys.forEach(k=>{const[r,c]=k.split(',').map(Number);grid[r][c]={t:-1,id:uid++};});
+    applyGravity();
+    renderGrid();
+    await delay(310);
+    cas++;
+  }
+  updateUI();saveData();
+}
+
+async function animSwap(r1,c1,r2,c2){
+  const eA=cellEls[r1][c1],eB=cellEls[r2][c2];
+  const dx=(c2-c1)*STRIDE,dy=(r2-r1)*STRIDE;
+  eA.style.transition=eB.style.transition='transform .16s ease-in-out';
+  eA.style.zIndex='5';eB.style.zIndex='4';
+  eA.style.transform=`translate(${dx}px,${dy}px)`;
+  eB.style.transform=`translate(${-dx}px,${-dy}px)`;
+  await delay(190);
+  eA.style.transition=eB.style.transition='';
+  eA.style.zIndex=eB.style.zIndex='';
+  eA.style.transform=eB.style.transform='';
+}
+
+async function handleClick(r,c){
+  if(animLock)return;
+  const tile=grid[r][c];
+  if(tile.t===EV_TYPE){
+    if(selCell){selCell=null;renderGrid();}
+    animLock=true;await collectEv(r,c);animLock=false;return;
+  }
+  if(!selCell){selCell={r,c};renderGrid();sndSelect();return;}
+  const{r:r1,c:c1}=selCell;selCell=null;
+  if(r1===r&&c1===c){renderGrid();return;}
+  const dr=Math.abs(r-r1),dc=Math.abs(c-c1);
+  if(dr+dc!==1){selCell={r,c};renderGrid();sndSelect();return;}
+  animLock=true;
+  await animSwap(r1,c1,r,c);
+  [grid[r1][c1],grid[r][c]]=[grid[r][c],grid[r1][c1]];
+  renderGrid();
+  const m=findMatches();
+  if(m.size===0){
+    await animSwap(r1,c1,r,c);
+    [grid[r1][c1],grid[r][c]]=[grid[r][c],grid[r1][c1]];
+    const sk=[r1+','+c1,r+','+c];
+    sk.forEach(k=>shakeCells.add(k));
+    renderGrid();
+    sk.forEach(k=>setTimeout(()=>{shakeCells.delete(k);},380));
+    sndInvalid();
+  }else{
+    movesLeft--;
+    await processMatches();
+    checkWinLose();
+  }
+  animLock=false;
+}
+
+async function collectEv(r,c){
+  if(evCount>=EV_NEED)return;
+  cellEls[r][c].classList.add('matched');
+  await delay(370);
+  grid[r][c]={t:-1,id:uid++};
+  evCount++;
+  updateEvSlots();
+  unlockA('evidence');
+  sndEvidence();
+  const nt={t:Math.floor(Math.random()*TYPES),id:uid++};
+  newIds.add(nt.id);grid[r][c]=nt;
+  renderGrid();updateUI();saveData();
+}
+
+// ─── RENDERING ──────────────────────────────────────────────
+function buildGrid(){
+  const el=document.getElementById('grid');el.innerHTML='';cellEls=[];
+  for(let r=0;r<GS;r++){
+    cellEls[r]=[];
+    for(let c=0;c<GS;c++){
+      const d=document.createElement('div');
+      d.className='tile';
+      const sp=document.createElement('span');
+      d.appendChild(sp);
+      d.addEventListener('click',()=>handleClick(r,c));
+      el.appendChild(d);cellEls[r][c]=d;
+    }
+  }
+}
+
+function renderGrid(){
+  for(let r=0;r<GS;r++){
+    for(let c=0;c<GS;c++){
+      const el=cellEls[r][c],tile=grid[r][c],sp=el.querySelector('span');
+      let cls='tile';
+      if(tile.t===-1){cls+=' t-empty';el.className=cls;sp.textContent='';continue;}
+      if(tile.t===EV_TYPE)cls+=' te';
+      else cls+=' t'+tile.t;
+      if(selCell&&selCell.r===r&&selCell.c===c)cls+=' selected';
+      if(newIds.has(tile.id)){cls+=' new-tile';newIds.delete(tile.id);}
+      if(shakeCells.has(r+','+c))cls+=' shake';
+      el.className=cls;
+      sp.textContent=tile.t===EV_TYPE?'🌿':TD[tile.t].e;
+    }
+  }
+}
+
+function showScorePop(pts,cas){
+  const p=document.createElement('div');p.className='score-popup';
+  p.textContent=cas>0?`+${pts} ×${cas+1}!`:`+${pts}`;
+  document.getElementById('grid-wrap').appendChild(p);
+  setTimeout(()=>p.remove(),1050);
+}
+
+// ─── LEVEL / WIN-LOSE ────────────────────────────────────────
+function startLevel(idx){
+  levelIdx=Math.max(0,Math.min(idx,LEVELS.length-1));
+  const lv=LEVELS[levelIdx];
+  score=0;movesLeft=lv.moves;evCount=0;
+  firstMatchDone=false;selCell=null;animLock=false;newIds.clear();shakeCells.clear();
+  if(levelIdx>=4)unlockA('lv5');
+  if(levelIdx>=9)unlockA('lv10');
+  initGrid();buildGrid();renderGrid();
+  updateUI();updateEvSlots();updateLB();closeModal();saveData();
+}
+
+function checkWinLose(){
+  const lv=LEVELS[levelIdx];
+  if(score>=lv.goal){
+    const xp=120+evCount*60+levelIdx*35;
+    playerXP+=xp;
+    const newLv=Math.floor(playerXP/600)+1;
+    if(newLv>playerLv)playerLv=newLv;
+    saveData();sndLevelUp();showWin(xp);
+  }else if(movesLeft<=0){
+    lives=Math.max(0,lives-1);saveData();showGameOver();
+  }
+}
+
+function showWin(xp){
+  const lv=LEVELS[levelIdx];
+  const next=levelIdx+1,isLast=next>=LEVELS.length;
+  const box=document.getElementById('modal-box');
+  box.innerHTML=`
+    <div class="lvl-badge">${isLast?'🏆':'🕵️'}</div>
+    <div class="modal-title">${isLast?'Case Closed!':'Case '+(levelIdx+1)+' Solved!'}</div>
+    <div class="sep"></div>
+    <div class="modal-text">${lv.story}</div>
+    <div style="font-size:.72rem;color:var(--gold);margin-bottom:16px;">
+      +${xp} XP &nbsp;·&nbsp; Evidence: ${evCount}/${EV_NEED}
+    </div>
+    <div class="modal-btns">
+      ${isLast?
+        `<button class="btn gold" onclick="startLevel(0)">Start Over</button>`:
+        `<button class="btn gold" onclick="startLevel(${next})">Case ${next+1} →</button>`
+      }
+    </div>`;
+  showModal();
+}
+
+function showGameOver(){
+  const box=document.getElementById('modal-box');
+  box.innerHTML=`
+    <div class="lvl-badge" style="background:linear-gradient(135deg,#1a0000,#5a1010);">💀</div>
+    <div class="modal-title">Case Cold</div>
+    <div class="modal-text">The trail has gone cold, Detective.<br>Your score: <strong>${score.toLocaleString()}</strong><br><br>Lives: ${lives>0?'♥'.repeat(lives):'—'}</div>
+    <div class="modal-btns">
+      <button class="btn" onclick="addMoves()">+5 Moves</button>
+      <button class="btn gold" onclick="startLevel(${levelIdx})">Retry Case ${levelIdx+1}</button>
+    </div>`;
+  showModal();
+}
+
+function addMoves(){movesLeft+=5;closeModal();updateUI();}
+
+function showWelcome(){
+  const box=document.getElementById('modal-box');
+  const showClaim=!dailyClaimed;
+  box.innerHTML=`
+    <div class="lvl-badge">🕵️</div>
+    <div class="modal-title">The Crimson Cipher</div>
+    <div class="sep"></div>
+    <div class="modal-text">Detective Marlowe. The vault has been robbed. Match clues to gather evidence and unravel the mystery.</div>
+    <div style="font-size:.72rem;color:var(--gold);margin-bottom:16px;">
+      ${streak>1?`🔥 ${streak}-day streak! Keep investigating!`:'Swap tiles to match 3+. Tap <span style="color:#60f0a0">🌿</span> evidence to collect it.'}
+    </div>
+    <div class="modal-btns">
+      ${showClaim?`<button class="btn gold" onclick="claimDaily()">🎁 Daily Reward</button>`:''}
+      <button class="btn" onclick="startLevel(${levelIdx})">Begin Case ${levelIdx+1}</button>
+    </div>`;
+  showModal();
+}
+
+function showModal(){document.getElementById('modal-overlay').classList.remove('hidden');}
+function closeModal(){document.getElementById('modal-overlay').classList.add('hidden');}
+
+// ─── DAILY REWARD ────────────────────────────────────────────
+function claimDaily(){
+  if(dailyClaimed)return;
+  dailyClaimed=true;ss('cc_dc',new Date().toDateString());
+  movesLeft+=5;sndDaily();
+  showToast('🎁','Daily Reward!','+5 Bonus Moves','Come back tomorrow!');
+  closeModal();startLevel(levelIdx);updateUI();saveData();
+}
+
+// ─── ACHIEVEMENTS ────────────────────────────────────────────
+function unlockA(id){
+  if(unlockedA.has(id))return;
+  unlockedA.add(id);
+  const def=ACHV.find(a=>a.id===id);if(!def)return;
+  showToast(def.i,'Achievement!',def.t,def.d);
+  sndAchv();saveData();
+}
+
+function showToast(icon,title,name,desc){
+  const t=document.createElement('div');t.className='toast';
+  t.innerHTML=`<div class="toast-icon">${icon}</div>
+    <div><div class="toast-title">${title}</div>
+    <div class="toast-name">${name}</div>
+    <div class="toast-desc">${desc}</div></div>`;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.animation='tout .3s ease-in forwards';setTimeout(()=>t.remove(),300);},3200);
+}
+
+// ─── UI UPDATES ──────────────────────────────────────────────
+function updateUI(){
+  document.getElementById('score-val').textContent=score.toLocaleString();
+  document.getElementById('level-val').textContent=levelIdx+1;
+  document.getElementById('moves-val').textContent=movesLeft;
+  document.getElementById('lives-val').textContent='♥'.repeat(Math.max(0,Math.min(5,lives)));
+  document.getElementById('streak-val').textContent=streak;
+
+  const xpInLv=playerXP%600,xpPct=(xpInLv/600*100).toFixed(1);
+  document.getElementById('xp-bar').style.width=xpPct+'%';
+  document.getElementById('xp-end').textContent='Lv '+playerLv;
+
+  const lv=LEVELS[levelIdx],gp=Math.min(100,(score/lv.goal*100)).toFixed(1);
+  document.getElementById('goal-bar').style.width=gp+'%';
+  document.getElementById('goal-end').textContent=gp+'%';
+
+  const db=document.getElementById('daily-btn');
+  db.disabled=dailyClaimed;db.textContent=dailyClaimed?'Claimed ✓':'Claim Daily';
+
+  updateStreakDots();updateDailyTimer();
+}
+
+function updateStreakDots(){
+  const el=document.getElementById('streak-dots');el.innerHTML='';
+  for(let i=0;i<7;i++){
+    const d=document.createElement('div');
+    d.className='sdot'+(i<Math.min(streak,7)?' lit':'');
+    el.appendChild(d);
+  }
+}
+
+function updateDailyTimer(){
+  const now=new Date(),midnight=new Date(now);
+  midnight.setHours(24,0,0,0);
+  const h=Math.floor((midnight-now)/3600000),m=Math.floor(((midnight-now)%3600000)/60000);
+  document.getElementById('daily-timer').textContent=
+    dailyClaimed?`Next reward in ${h}h ${m}m`:'Available now!';
+}
+
+function updateEvSlots(){
+  for(let i=0;i<EV_NEED;i++){
+    const s=document.getElementById('ev'+i);
+    if(i<evCount){s.className='ev-slot filled';s.textContent='🌿';}
+    else{s.className='ev-slot';s.textContent='Tap 🌿';}
+  }
+}
+
+function updateLB(){
+  const list=document.getElementById('lb-list');
+  document.getElementById('lb-case').textContent='Case '+(levelIdx+1);
+  const entries=[...FAKE_LB,{n:'You',s:totalScore,y:true}]
+    .sort((a,b)=>b.s-a.s).slice(0,5);
+  list.innerHTML=entries.map((e,i)=>`
+    <div class="lb-row${e.y?' you':''}">
+      <span class="lb-rank">${i+1}</span>
+      <span class="lb-name">${e.n}</span>
+      <span class="lb-score">${e.s.toLocaleString()}</span>
+    </div>`).join('');
+}
+
+// ─── FOMO TIMER ──────────────────────────────────────────────
+setInterval(updateDailyTimer,60000);
+
+// ─── INIT ───────────────────────────────────────────────────
+function init(){
+  loadData();
+  buildGrid();
+  startLevel(levelIdx);
+  updateEvSlots();
+  updateLB();
+  showWelcome();
+}
+
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
