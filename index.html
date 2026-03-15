@@ -72,6 +72,11 @@ body{background:#07070f;color:#f0f0ff;font-family:'Syne',system-ui,sans-serif;mi
 ================================================================ */
 var FOUNDER_EMAIL = 'ahathaway21@gmail.com';
 
+// Repo coordinates hard-coded so any fresh browser can read gc-data.json immediately
+// (token is never stored here — only in localStorage after Admin setup or invite link)
+var REPO_OWNER = 'ahathaway21';
+var REPO_NAME  = 'gameconsole';
+
 var BUILT_IN_GAMES = [];  // No built-in games — upload games via Admin > Games
 
 /* ================================================================
@@ -85,10 +90,14 @@ function gsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){}
 ================================================================ */
 var GH = {
   owner:'', repo:'', token:'',
-  configured: function(){ return !!(this.owner&&this.repo&&this.token); },
+  configured: function(){ return !!(this.owner&&this.repo&&this.token); }, // can write
+  readable:   function(){ return !!(this.owner&&this.repo); },             // can read (public repo)
   load: function(){
     var c=gsGet('gc:gh-config');
     if(c){ this.owner=c.owner||''; this.repo=c.repo||''; this.token=c.token||''; }
+    // Bootstrap from constants if owner/repo not yet in localStorage
+    if(!this.owner) this.owner=REPO_OWNER;
+    if(!this.repo)  this.repo=REPO_NAME;
   },
   save: function(o,r,t){
     this.owner=o; this.repo=r; this.token=t;
@@ -102,9 +111,9 @@ function toB64(str){
   return btoa(unescape(encodeURIComponent(str)));
 }
 
-// Fetch gc-data.json from GitHub (public read, no auth needed)
+// Fetch gc-data.json from GitHub (public read — no token needed)
 function ghRead(){
-  if(!GH.configured()) return Promise.resolve(null);
+  if(!GH.readable()) return Promise.resolve(null);
   var url='https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/main/gc-data.json?t='+Date.now();
   return fetch(url).then(function(r){ return r.ok?r.json():null; }).catch(function(){ return null; });
 }
@@ -161,8 +170,9 @@ function ghDeleteGameFile(id){
     .catch(function(){ return false; });
 }
 
-// Fetch a single game HTML from GitHub (public raw URL, no auth needed)
+// Fetch a single game HTML from GitHub (public raw URL — no token needed)
 function ghReadGameFile(id){
+  if(!GH.readable()) return Promise.resolve(null);
   var url='https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/main/gc-games/'+id+'.html?t='+Date.now();
   return fetch(url).then(function(r){ return r.ok?r.text():null; }).catch(function(){ return null; });
 }
@@ -189,11 +199,10 @@ function buildGhData(){
 // Apply data from GitHub into localStorage
 function applyGhData(d){
   if(!d) return;
-  // Apply owner+repo from gc-data.json so new devices know where to look
-  // Token is NOT in gc-data.json — users get it via invite link or admin setup
+  // Apply owner+repo from gc-data.json so all devices know where to read from
+  // Token is NOT in gc-data.json — preserved from localStorage if already set
   if(d.ghConfig&&d.ghConfig.owner&&d.ghConfig.repo){
     var existing=gsGet('gc:gh-config')||{};
-    // Only update owner/repo — preserve any token already stored locally
     gsSet('gc:gh-config',{owner:d.ghConfig.owner,repo:d.ghConfig.repo,token:existing.token||''});
     GH.load();
   }
@@ -237,11 +246,12 @@ function applyGhData(d){
 }
 
 // Pull from GitHub then continue — fetches metadata AND any missing game HTML files
+// Uses readable() — works for all users even without a token (public repo)
 function syncFromGH(){
-  if(!GH.configured()) return Promise.resolve();
+  if(!GH.readable()) return Promise.resolve();
   return ghRead().then(function(d){
     applyGhData(d);
-    // Now fetch HTML for any games that are missing it locally
+    // Fetch HTML for any games missing locally
     var games=gsGet('gc:custom-games')||[];
     var missing=games.filter(function(g){ return !g.html||g.html===''; });
     if(missing.length===0) return;
@@ -249,7 +259,6 @@ function syncFromGH(){
       return ghReadGameFile(g.id).then(function(html){
         if(html){
           g.html=html;
-          // Update in localStorage
           var all=gsGet('gc:custom-games')||[];
           var updated=all.map(function(x){ return x.id===g.id?Object.assign({},x,{html:html}):x; });
           gsSet('gc:custom-games',updated);
@@ -380,7 +389,7 @@ function renderBoot(app){
   setTimeout(function(){
     checkInviteParam();
     var status=document.getElementById('boot-status');
-    if(status) status.textContent=GH.configured()?'Syncing...':'Loading...';
+    if(status) status.textContent=GH.readable()?'Syncing...':'Loading...';
     syncFromGH().then(function(){
       S.customGames=gsGet('gc:custom-games')||[];
       var email=localStorage.getItem('gc:me');
@@ -1094,7 +1103,7 @@ var _currentGame=null, _currentBlobUrl=null;
 
 function launchGame(game){
   // If HTML is missing locally but GitHub is configured, fetch it first
-  if((!game.html||game.html==='') && GH.configured()){
+  if((!game.html||game.html==='') && GH.readable()){
     var app=document.getElementById('app');
     if(app) app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px">'
       +'<div class="logo-font" style="font-size:18px;font-weight:700;color:#a78bfa">'+game.emoji+' Loading '+esc(game.name)+'...</div>'
