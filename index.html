@@ -396,17 +396,42 @@ function loadScores(){
 function submitScore(gameId,pts){
   var raw=gsGet('gc:scores:'+gameId)||[];
   var entry={email:S.user.email,displayName:S.user.displayName,score:pts,date:Date.now()};
-  // Add new entry and keep all scores (not sliced — buildGhData sends all to GitHub)
   var updated=raw.concat([entry]);
   updated.sort(function(a,b){return b.score-a.score;});
-  gsSet('gc:scores:'+gameId,updated.slice(0,100)); // keep top 100 max
+  gsSet('gc:scores:'+gameId,updated.slice(0,100));
   var top5=updated.slice(0,5);
   var rank=-1;
   top5.forEach(function(s,i){ if(s.email===S.user.email&&s.score===pts) rank=i+1; });
   S.scores[gameId]=top5;
-  // Push score to GitHub — works for token holders; others need a Sync
+  // Push score — read GitHub first so we never overwrite other users' data
   if(GH.configured()){
-    ghWrite(buildGhData());
+    ghRead().then(function(ghData){
+      // Merge GitHub users into local before pushing so no accounts are lost
+      if(ghData&&ghData.users&&ghData.users.length>0){
+        var localUsers=gsGet('gc:users')||[];
+        var merged=ghData.users.slice();
+        localUsers.forEach(function(lu){
+          if(!merged.find(function(u){return u.email===lu.email;})) merged.push(lu);
+        });
+        gsSet('gc:users',merged);
+      }
+      // Merge GitHub scores too
+      if(ghData&&ghData.scores){
+        Object.keys(ghData.scores).forEach(function(gid){
+          var ghScores=ghData.scores[gid];
+          if(!ghScores||!ghScores.length) return;
+          var local=gsGet('gc:scores:'+gid)||[];
+          var seen={};
+          var combined=local.concat(ghScores).filter(function(s){
+            var key=s.email+'|'+s.score+'|'+(s.date||0);
+            if(seen[key]) return false; seen[key]=true; return true;
+          });
+          combined.sort(function(a,b){return b.score-a.score;});
+          gsSet('gc:scores:'+gid,combined.slice(0,100));
+        });
+      }
+      ghWrite(buildGhData());
+    });
   }
   return {top5:top5,rank:rank,needsSync:!GH.configured()};
 }
@@ -936,24 +961,37 @@ function processUpload(file){
     var name=(doc.querySelector('meta[name="game-name"]')||{}).content||file.name.replace('.html','');
     var emoji=(doc.querySelector('meta[name="game-emoji"]')||{}).content||'\uD83C\uDFAE';
     var description=(doc.querySelector('meta[name="game-description"]')||{}).content||'A custom game';
-    var id='custom-'+name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,30)+'-'+Date.now().toString(36);
-    var gameData={id:id,name:name,emoji:emoji,description:description,html:html,
-                  bg:'linear-gradient(135deg,#0f766e,#0d9488)',accent:'#2dd4bf',builtin:false};
     var existing=gsGet('gc:custom-games')||[];
+    // Check if a game with the same name already exists — reuse its ID to preserve scores
+    var existingGame=existing.find(function(g){
+      return g.name.toLowerCase()===name.toLowerCase();
+    });
+    var id=existingGame
+      ? existingGame.id  // reuse ID — scores for this game are preserved
+      : 'custom-'+name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,30)+'-'+Date.now().toString(36);
+    var isUpdate=!!existingGame;
+    var gameData={id:id,name:name,emoji:emoji,description:description,html:html,
+                  bg:(existingGame&&existingGame.bg)||'linear-gradient(135deg,#0f766e,#0d9488)',
+                  accent:(existingGame&&existingGame.accent)||'#2dd4bf',builtin:false};
+    // Replace existing entry or add new one — never create a duplicate
     var updated=existing.filter(function(g){return g.id!==id;}).concat([gameData]);
-    gsSet('gc:custom-games',updated); S.customGames=updated; S.scores[id]=[];
+    gsSet('gc:custom-games',updated); S.customGames=updated;
+    if(!S.scores[id]) S.scores[id]=[];  // only init scores if truly new
+    var successMsg=isUpdate
+      ?'&#10003; "'+esc(name)+'" updated — scores are preserved!'
+      :'&#10003; "'+esc(name)+'" added and available to all players!';
     if(GH.configured()){
       ghWriteGameFile(id, html).then(function(r){
         if(r&&r.ok){
           ghWrite(buildGhData());
-          if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added and available to all players!</div>';
+          if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">'+successMsg+'</div>';
         } else {
           if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;font-size:13px">&#9888; Saved locally. Other players may need to sync to see it.</div>';
         }
         setTimeout(function(){ go('upload'); },1600);
       });
     } else {
-      if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added to your arcade!</div>';
+      if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">'+successMsg+'</div>';
       setTimeout(function(){ go('upload'); },1400);
     }
   };
@@ -965,6 +1003,20 @@ function processUpload(file){
 ================================================================ */
 function renderAdmin(app){
   if(!S.user||S.user.email!==FOUNDER_EMAIL){ go('hub'); return; }
+
+  // Show loading state while we pull latest data from GitHub
+  app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px">'
+    +'<div class="logo-font" style="font-size:16px;font-weight:700;color:#a78bfa">Loading Admin...</div>'
+    +'<div class="spinner"></div>'
+    +'</div>';
+
+  // Always pull fresh from GitHub before rendering so we see all users/data
+  syncFromGH().then(function(){
+    renderAdminContent(app);
+  });
+}
+
+function renderAdminContent(app){
 
   var users=gsGet('gc:users')||[];
   var ghConfigured=GH.configured();
