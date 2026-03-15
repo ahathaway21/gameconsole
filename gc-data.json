@@ -1,28 +1,35 @@
 {
   "version": 3,
-  "updatedAt": 1773597969253,
+  "updatedAt": 1773598118254,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
       "displayName": "ahathaway21",
       "passwordHash": "d9f460155599817b369786f1c1cb0263784552375d9a2b37cf375cc34de57c76",
       "isAdmin": true,
-      "joinedAt": 1773596784304,
+      "joinedAt": 1773594006885,
       "invitedBy": null
-    }
-  ],
-  "invites": [],
-  "scores": {},
-  "customGamesMeta": [
+    },
     {
-      "id": "custom-cat-blast-mms2fr2j",
-      "name": "Cat Blast",
-      "emoji": "😺",
-      "description": "Drag cat-shaped blocks onto the board to fill rows and columns — hear the meows when you clear lines!",
-      "bg": "linear-gradient(135deg,#0f766e,#0d9488)",
-      "accent": "#2dd4bf"
+      "email": "hathawaynoaha@gmail.com",
+      "displayName": "hathawaynoaha",
+      "passwordHash": "9a7d9e7b18d9572adcbbe6a3816ae1cff471947108738fd0d31c178680274546",
+      "isAdmin": false,
+      "joinedAt": 1773598118254,
+      "invitedBy": "ahathaway21@gmail.com"
     }
   ],
+  "invites": [
+    {
+      "email": "hathawaynoaha@gmail.com",
+      "by": "ahathaway21@gmail.com",
+      "byName": "ahathaway21",
+      "at": 1773598006888,
+      "status": "accepted"
+    }
+  ],
+  "scores": {},
+  "customGamesMeta": [],
   "ghConfig": {
     "owner": "ahathaway21",
     "repo": "gameconsole"
