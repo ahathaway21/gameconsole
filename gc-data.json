@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773599792214,
+  "updatedAt": 1773599892616,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -17,6 +17,13 @@
       "by": "ahathaway21@gmail.com",
       "byName": "ahathaway21",
       "at": 1773598006888,
+      "status": "pending"
+    },
+    {
+      "email": "mary.hathaway@gmail.com",
+      "by": "ahathaway21@gmail.com",
+      "byName": "ahathaway21",
+      "at": 1773599807397,
       "status": "pending"
     }
   ],
