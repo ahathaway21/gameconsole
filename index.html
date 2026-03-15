@@ -177,6 +177,16 @@ function ghReadGameFile(id){
   return fetch(url).then(function(r){ return r.ok?r.text():null; }).catch(function(){ return null; });
 }
 
+// List all files in gc-games/ via GitHub API (requires token)
+function ghListGameFiles(){
+  if(!GH.configured()) return Promise.resolve([]);
+  var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-games';
+  var headers={'Authorization':'Bearer '+GH.token,'Accept':'application/vnd.github.v3+json','X-GitHub-Api-Version':'2022-11-28'};
+  return fetch(apiUrl,{headers:headers})
+    .then(function(r){ return r.ok?r.json():[]; })
+    .catch(function(){ return []; });
+}
+
 // Build the canonical data object from localStorage
 // Games HTML is embedded directly — single file, single write, no token needed to read
 function buildGhData(){
@@ -276,24 +286,58 @@ function syncToGH(){
   ghWrite(buildGhData());
 }
 
-// Full sync — pull from GitHub then push back with any local-only games merged in
-// This is what the Sync button calls — ensures your token pushes everyone's games
+// Full sync — pull, discover orphaned gc-games/ files, then push everything back
 function fullSync(){
   if(!GH.readable()) return Promise.resolve();
   return ghRead().then(function(d){
     applyGhData(d);
-    // Fallback: fetch separate game files for any still missing HTML
-    var games=gsGet('gc:custom-games')||[];
-    var missing=games.filter(function(g){ return !g.html||g.html===''; });
-    return Promise.all(missing.map(function(g){
+
+    var local=gsGet('gc:custom-games')||[];
+
+    // Step 1: fetch HTML for any games in local list with empty HTML
+    var missingHtml=local.filter(function(g){ return !g.html||g.html===''; });
+    var fetchMissing=Promise.all(missingHtml.map(function(g){
       return ghReadGameFile(g.id).then(function(html){
         if(html){
           var all=gsGet('gc:custom-games')||[];
           gsSet('gc:custom-games',all.map(function(x){ return x.id===g.id?Object.assign({},x,{html:html}):x; }));
         }
       });
-    })).then(function(){
-      // If we have a token, push back — merges any local games into GitHub
+    }));
+
+    // Step 2: if we have a token, scan gc-games/ for files not yet in our list
+    var discoverNew = GH.configured() ? ghListGameFiles().then(function(files){
+      if(!files||!files.length) return;
+      var knownIds=(gsGet('gc:custom-games')||[]).map(function(g){return g.id;});
+      // Find .html files whose ID is not in our known list
+      var unknown=files.filter(function(f){
+        if(!f.name||!f.name.endsWith('.html')) return false;
+        var fid=f.name.replace('.html','');
+        return knownIds.indexOf(fid)<0;
+      });
+      if(!unknown.length) return;
+      return Promise.all(unknown.map(function(f){
+        var fid=f.name.replace('.html','');
+        return ghReadGameFile(fid).then(function(html){
+          if(!html) return;
+          // Parse metadata from the HTML
+          var parser=new DOMParser();
+          var doc=parser.parseFromString(html,'text/html');
+          var name=(doc.querySelector('meta[name="game-name"]')||{}).content||fid;
+          var emoji=(doc.querySelector('meta[name="game-emoji"]')||{}).content||'\uD83C\uDFAE';
+          var description=(doc.querySelector('meta[name="game-description"]')||{}).content||'A custom game';
+          var gameData={id:fid,name:name,emoji:emoji,description:description,html:html,
+                        bg:'linear-gradient(135deg,#0f766e,#0d9488)',accent:'#2dd4bf',builtin:false};
+          var all=gsGet('gc:custom-games')||[];
+          if(!all.find(function(x){return x.id===fid;})){
+            gsSet('gc:custom-games',all.concat([gameData]));
+          }
+        });
+      }));
+    }) : Promise.resolve();
+
+    return Promise.all([fetchMissing, discoverNew]).then(function(){
+      // Push everything back if we have a token — consolidates all games into gc-data.json
       if(GH.configured()) ghWrite(buildGhData());
     });
   });
