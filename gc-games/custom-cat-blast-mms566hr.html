@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="game-name"        content="Cat Blast">
+<meta name="game-emoji"       content="😺">
+<meta name="game-description" content="Drag cat-shaped blocks onto the board to fill rows and columns — hear the meows when you clear lines!">
+<title>Cat Blast 😺</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100dvh;overflow:hidden;
+  background:radial-gradient(ellipse at 22% 18%,#2e156a 0%,#0c0620 50%,#050112 100%);
+  display:flex;flex-direction:column;align-items:center;
+  font-family:'Fredoka One',cursive;
+  touch-action:none;
+  -webkit-user-select:none;user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+@keyframes tw{0%,100%{opacity:.1}50%{opacity:.9}}
+.star{position:fixed;background:#fff;border-radius:50%;pointer-events:none;z-index:0}
+
+/* ── header ── */
+#hdr{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  padding:max(env(safe-area-inset-top,0px),8px) 12px 4px;
+  flex-shrink:0;position:relative;z-index:20;
+}
+.scores{display:flex;gap:7px}
+.sbox{
+  background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.12);
+  border-radius:12px;padding:2px 14px;text-align:center;min-width:64px;
+}
+.slabel{font-size:.48rem;color:rgba(255,255,255,.38);letter-spacing:2px;text-transform:uppercase;display:block}
+.sval{font-size:1.45rem;color:#FFD700;line-height:1.1;display:block;transition:transform .1s}
+.sval.pop{transform:scale(1.22)}
+
+/* streak badge */
+#streakBadge{
+  display:none;align-items:center;gap:4px;
+  background:rgba(255,100,0,.18);border:1.5px solid rgba(255,120,0,.4);
+  border-radius:20px;padding:2px 10px;font-size:.72rem;color:#FFA040;
+  white-space:nowrap;
+}
+#streakBadge.show{display:flex}
+
+#muteBtn{
+  background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.16);
+  border-radius:50%;width:36px;height:36px;font-size:1rem;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;cursor:pointer;
+}
+
+/* ── board ── */
+#boardWrap{
+  flex-shrink:0;position:relative;z-index:10;
+  display:flex;align-items:center;justify-content:center;
+}
+#board{display:block;border-radius:10px;box-shadow:0 0 40px rgba(90,40,200,.4)}
+/* particle canvas – sits above board, same size, pointer-events none */
+#particles{
+  position:absolute;top:0;left:0;pointer-events:none;
+  border-radius:10px;z-index:12;
+}
+@keyframes shake{
+  0%,100%{transform:translate(0,0) rotate(0)}
+  15%{transform:translate(-5px,3px) rotate(-.5deg)}
+  30%{transform:translate(4px,-4px) rotate(.4deg)}
+  45%{transform:translate(-3px,5px) rotate(-.3deg)}
+  60%{transform:translate(5px,-2px) rotate(.5deg)}
+  75%{transform:translate(-4px,3px) rotate(-.2deg)}
+}
+#boardWrap.shake{animation:shake .38s ease}
+
+/* danger glow when board > 65% full */
+@keyframes dangerPulse{
+  0%,100%{box-shadow:0 0 40px rgba(90,40,200,.4)}
+  50%{box-shadow:0 0 40px rgba(255,40,40,.55),0 0 70px rgba(255,0,0,.18)}
+}
+#board.danger{animation:dangerPulse 1.1s ease-in-out infinite}
+
+/* ── tray ── */
+#tray{
+  display:flex;justify-content:center;align-items:center;
+  gap:8px;padding:7px 10px;
+  padding-bottom:max(env(safe-area-inset-bottom,8px),8px);
+  flex-shrink:0;z-index:10;position:relative;width:100%;
+}
+.slot{
+  border:2px solid rgba(255,255,255,.10);border-radius:12px;
+  background:rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:border-color .15s,background .15s,transform .12s;
+  cursor:grab;position:relative;
+}
+.slot.lift{border-color:rgba(255,210,0,.55);background:rgba(255,210,0,.07);transform:scale(1.06)}
+.slot.empty{opacity:.16;cursor:default;pointer-events:none}
+
+/* ── drag ghost ── */
+#drag{
+  position:fixed;pointer-events:none;display:none;z-index:999;
+  filter:drop-shadow(0 12px 30px rgba(0,0,0,.7));opacity:.93;
+  will-change:left,top;
+}
+
+/* ── floating score text ── */
+.floatPts{
+  position:fixed;pointer-events:none;z-index:700;
+  font-size:1.15rem;color:#FFD700;font-family:'Fredoka One',cursive;
+  text-shadow:1px 1px 0 #a010c0;white-space:nowrap;
+  animation:floatUp .95s ease forwards;
+}
+@keyframes floatUp{
+  0%{opacity:1;transform:translateY(0) scale(1)}
+  40%{opacity:1;transform:translateY(-22px) scale(1.14)}
+  100%{opacity:0;transform:translateY(-58px) scale(.82)}
+}
+
+/* ── new best ribbon ── */
+#bestRibbon{
+  display:none;position:fixed;top:64px;left:50%;transform:translateX(-50%);
+  z-index:650;background:linear-gradient(90deg,#f5a623,#e83d8c);
+  color:#fff;padding:5px 22px;border-radius:30px;font-size:.9rem;
+  box-shadow:0 4px 18px rgba(232,61,140,.55);pointer-events:none;
+  animation:ribbonPop .5s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+@keyframes ribbonPop{
+  0%{opacity:0;transform:translateX(-50%) scale(.4)}
+  100%{opacity:1;transform:translateX(-50%) scale(1)}
+}
+
+/* ── combo banner ── */
+#combo{
+  position:fixed;pointer-events:none;z-index:600;
+  font-size:clamp(1.3rem,5.5vw,2rem);color:#FFD700;
+  text-shadow:0 0 20px rgba(255,200,0,.9),2px 2px 0 #c0187a;
+  display:none;left:50%;top:36%;transform:translate(-50%,-50%);white-space:nowrap;
+}
+@keyframes comboFly{
+  0%  {opacity:0;transform:translate(-50%,-50%) scale(.2) rotate(-12deg)}
+  20% {opacity:1;transform:translate(-50%,-50%) scale(1.35) rotate(4deg)}
+  50% {transform:translate(-50%,-50%) scale(1) rotate(0)}
+  78% {opacity:1;transform:translate(-50%,-65%) scale(.94)}
+  100%{opacity:0;transform:translate(-50%,-86%) scale(.8)}
+}
+
+/* ── game over overlay ── */
+#go{
+  display:none;position:fixed;inset:0;
+  background:rgba(3,0,12,.90);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;z-index:800;text-align:center;padding:28px;
+}
+#go.show{display:flex}
+.go-paws{font-size:2.8rem;animation:pawB .55s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes pawB{0%{transform:scale(0) rotate(-20deg)}100%{transform:scale(1) rotate(0)}}
+.go-title{font-size:clamp(2rem,8vw,3rem);color:#FFD700;text-shadow:0 0 32px rgba(255,200,0,.85),2px 3px 0 #6a28b8}
+.go-label{color:rgba(255,255,255,.46);font-size:.72rem;letter-spacing:3px;text-transform:uppercase}
+.go-score{color:#FFD700;font-size:clamp(2rem,10vw,2.8rem);line-height:1.1;display:block}
+.go-best{color:rgba(255,255,255,.38);font-size:.72rem;letter-spacing:2px;margin-top:3px}
+.go-best span{color:rgba(255,200,80,.65)}
+.go-stats{display:flex;gap:14px;margin-top:2px}
+.go-stat{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px 16px;text-align:center}
+.go-stat .sv{font-size:1.3rem;color:#fff;display:block}
+.go-stat .sl{font-size:.56rem;color:rgba(255,255,255,.38);letter-spacing:2px;text-transform:uppercase;display:block}
+.go-btn{
+  background:linear-gradient(135deg,#7b2fbe,#d81b7c);color:#fff;border:none;
+  padding:13px 46px;border-radius:50px;font-family:'Fredoka One',cursive;
+  font-size:1.2rem;cursor:pointer;box-shadow:0 6px 28px rgba(120,40,190,.55);
+  transition:transform .14s;
+}
+.go-btn:active{transform:scale(.94)}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="scores">
+    <div class="sbox"><span class="slabel">Score</span><span class="sval" id="scoreEl">0</span></div>
+    <div class="sbox"><span class="slabel">Best</span><span class="sval"  id="bestEl">0</span></div>
+  </div>
+  <div id="streakBadge">🔥 <span id="streakNum">0</span></div>
+  <button id="muteBtn" onclick="toggleMute()" aria-label="Toggle sound">🔊</button>
+</div>
+
+<div id="boardWrap">
+  <canvas id="board"></canvas>
+  <canvas id="particles"></canvas>
+</div>
+
+<div id="tray">
+  <div class="slot" id="s0"><canvas id="pc0"></canvas></div>
+  <div class="slot" id="s1"><canvas id="pc1"></canvas></div>
+  <div class="slot" id="s2"><canvas id="pc2"></canvas></div>
+</div>
+
+<canvas id="drag"></canvas>
+<div id="combo"></div>
+<div id="bestRibbon">🏆 New Best!</div>
+
+<div id="go">
+  <div class="go-paws">😿</div>
+  <div class="go-title">Game Over!</div>
+  <div>
+    <div class="go-label">Final Score</div>
+    <span class="go-score" id="finalScore">0</span>
+    <div class="go-best">Best: <span id="goBest">0</span></div>
+  </div>
+  <div class="go-stats">
+    <div class="go-stat"><span class="sv" id="goLines">0</span><span class="sl">Lines</span></div>
+    <div class="go-stat"><span class="sv" id="goMaxCombo">0</span><span class="sl">Max Combo</span></div>
+    <div class="go-stat"><span class="sv" id="goMaxStreak">0</span><span class="sl">Streak</span></div>
+  </div>
+  <button class="go-btn" onclick="startGame()">Play Again 🐾</button>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════
+   STARS
+═══════════════════════════════════════════════════ */
+(function(){
+  const f=document.createDocumentFragment();
+  for(let i=0;i<80;i++){
+    const s=document.createElement('div'); s.className='star';
+    const z=(Math.random()*2+.3).toFixed(1);
+    s.style.cssText=`width:${z}px;height:${z}px;`
+      +`left:${(Math.random()*100).toFixed(2)}%;top:${(Math.random()*100).toFixed(2)}%;`
+      +`animation:tw ${(Math.random()*4+2).toFixed(1)}s ${(Math.random()*4).toFixed(1)}s infinite ease-in-out`;
+    f.appendChild(s);
+  }
+  document.body.appendChild(f);
+})();
+
+/* ═══════════════════════════════════════════════════
+   AUDIO — 6 distinct synthesised cat sounds
+   1. place (soft plop)
+   2. 1 line cleared  — single satisfied "mrrow"
+   3. 2 lines cleared — cheerful double meow
+   4. 3 lines cleared — excited rapid triple
+   5. 4+ lines cleared — wild fanfare chorus
+   6. new high score  — ascending celebratory trill
+   7. game over       — slow descending sad meow
+═══════════════════════════════════════════════════ */
+let _ac=null, muted=false;
+function ac(){
+  if(!_ac) _ac=new(window.AudioContext||window.webkitAudioContext)();
+  if(_ac.state==='suspended') _ac.resume();
+  return _ac;
+}
+function toggleMute(){
+  muted=!muted;
+  document.getElementById('muteBtn').textContent=muted?'🔇':'🔊';
+}
+
+/* Core meow synthesiser.
+   pitch   : frequency multiplier (1 = 420 Hz base)
+   vowel   : 0=closed(ee) → 1=open(ow)
+   dur     : total note length (seconds)
+   vol     : gain (0–1)
+   delay   : seconds from now */
+function meow(pitch,vowel,dur,vol,delay){
+  if(muted)return;
+  pitch=pitch||1; vowel=vowel??0.6; dur=dur||0.55; vol=vol||0.26; delay=delay||0;
+  const ctx=ac(), t=ctx.currentTime+delay;
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(vol,t+Math.min(.08,dur*.15));
+  g.gain.setValueAtTime(vol,t+dur*.42);
+  g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  g.connect(ctx.destination);
+
+  const bf=420*pitch;
+  const osc=ctx.createOscillator(); osc.type='sawtooth';
+  osc.frequency.setValueAtTime(bf*.72,t);
+  osc.frequency.linearRampToValueAtTime(bf*(1+vowel*.22),t+dur*.18);
+  osc.frequency.linearRampToValueAtTime(bf*(1.28+vowel*.08),t+dur*.38);
+  osc.frequency.exponentialRampToValueAtTime(bf*(.55+vowel*.32),t+dur*.88);
+
+  const form=ctx.createBiquadFilter(); form.type='bandpass'; form.Q.value=3.8;
+  form.frequency.setValueAtTime(820*pitch,t);
+  form.frequency.linearRampToValueAtTime(1700*pitch,t+dur*.25);
+  form.frequency.exponentialRampToValueAtTime(550*pitch,t+dur*.85);
+
+  const shelf=ctx.createBiquadFilter(); shelf.type='highshelf'; shelf.frequency.value=3400; shelf.gain.value=-12;
+
+  const vib=ctx.createOscillator(); vib.frequency.value=6+pitch*1.5;
+  const vg=ctx.createGain();
+  vg.gain.setValueAtTime(0,t);
+  vg.gain.linearRampToValueAtTime(14*pitch,t+dur*.25);
+  vg.gain.setValueAtTime(14*pitch,t+dur*.55);
+  vg.gain.linearRampToValueAtTime(0,t+dur*.9);
+  vib.connect(vg); vg.connect(osc.frequency);
+
+  osc.connect(form); form.connect(shelf); shelf.connect(g);
+  osc.start(t); osc.stop(t+dur+.05);
+  vib.start(t); vib.stop(t+dur+.05);
+
+  // breathy onset noise
+  const n=ctx.createOscillator(); n.type='sawtooth'; n.frequency.value=bf*3.2;
+  const ng=ctx.createGain(); ng.gain.setValueAtTime(.035,t); ng.gain.linearRampToValueAtTime(0,t+.10);
+  n.connect(ng); ng.connect(g); n.start(t); n.stop(t+.12);
+}
+
+/* purr — low rumbling bass */
+function purr(delay,dur,vol){
+  if(muted)return;
+  const ctx=ac(), t=ctx.currentTime+(delay||0);
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol||.14,t+.12);
+  g.gain.setValueAtTime(vol||.14,t+(dur||.7)-.1); g.gain.exponentialRampToValueAtTime(.001,t+(dur||.7));
+  g.connect(ctx.destination);
+  const o=ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=38;
+  const lfo=ctx.createOscillator(); lfo.frequency.value=25;
+  const lfog=ctx.createGain(); lfog.gain.value=14;
+  lfo.connect(lfog); lfog.connect(o.frequency);
+  const f=ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=180;
+  o.connect(f); f.connect(g);
+  o.start(t); o.stop(t+(dur||.7)+.05);
+  lfo.start(t); lfo.stop(t+(dur||.7)+.05);
+}
+
+/* short chirp — for trills */
+function chirp(pitch,delay,vol){
+  if(muted)return;
+  const ctx=ac(), t=ctx.currentTime+(delay||0);
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol||.22,t+.025);
+  g.gain.exponentialRampToValueAtTime(.001,t+.22);
+  g.connect(ctx.destination);
+  const o=ctx.createOscillator(); o.type='triangle';
+  o.frequency.setValueAtTime(480*pitch,t); o.frequency.exponentialRampToValueAtTime(820*pitch,t+.12);
+  const f=ctx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200*pitch; f.Q.value=4;
+  o.connect(f); f.connect(g); o.start(t); o.stop(t+.25);
+}
+
+/* 1-line: single slow satisfied meow */
+function soundLine1(){
+  meow(1.0, .55, .68, .28, 0);
+}
+/* 2-line: cheerful ascending pair */
+function soundLine2(){
+  meow(0.95, .50, .55, .26, 0);
+  meow(1.20, .65, .55, .28, .34);
+}
+/* 3-line: rapid excited triple */
+function soundLine3(){
+  meow(1.0,  .55, .45, .26, 0);
+  meow(1.18, .68, .42, .27, .28);
+  meow(1.38, .78, .42, .29, .53);
+}
+/* 4-line: wild fanfare + purr */
+function soundLine4(){
+  meow(1.0,  .52, .38, .25, 0);
+  meow(1.15, .60, .38, .26, .22);
+  meow(1.30, .72, .38, .27, .42);
+  meow(1.50, .85, .40, .30, .60);
+  purr(.25, .90, .18);
+}
+/* high score: ascending chirp trill */
+function soundHighScore(){
+  const pitches=[0.9,1.0,1.12,1.26,1.42,1.60,1.80];
+  pitches.forEach((p,i)=>chirp(p, i*.095, .20));
+  meow(1.6,.9,.55,.28,.72);
+}
+/* game over: two slow descending sad meows */
+function soundGameOver(){
+  meow(.80, .25, .90, .28, 0);
+  meow(.60, .12, .80, .22, .70);
+}
+/* place (no clear): soft thud */
+function soundPlace(){
+  if(muted)return;
+  const ctx=ac(), t=ctx.currentTime;
+  const o=ctx.createOscillator(); o.type='sine';
+  o.frequency.setValueAtTime(160,t); o.frequency.exponentialRampToValueAtTime(48,t+.11);
+  const g=ctx.createGain(); g.gain.setValueAtTime(.12,t); g.gain.exponentialRampToValueAtTime(.001,t+.13);
+  o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+.15);
+}
+
+/* route to correct clear sound */
+function soundClear(lines){
+  if(muted) return;
+  if(lines===1) soundLine1();
+  else if(lines===2) soundLine2();
+  else if(lines===3) soundLine3();
+  else soundLine4();
+}
+
+/* haptic */
+function haptic(pattern){
+  try{ navigator.vibrate&&navigator.vibrate(pattern); }catch(e){}
+}
+
+/* ═══════════════════════════════════════════════════
+   SIZING
+═══════════════════════════════════════════════════ */
+const GRID=8;
+let CELL=44, SLOT=108;
+function calcSizes(){
+  const vw=Math.min(window.innerWidth,520);
+  const vh=window.innerHeight;
+  const hdrH=document.getElementById('hdr').getBoundingClientRect().height||48;
+  const avW=vw-18;
+  const slotEst=Math.floor((avW-16)/3);
+  const trayH=slotEst+26;
+  const avH=vh-hdrH-trayH-10;
+  CELL=Math.max(26,Math.min(58,Math.floor(Math.min(avW,avH)/GRID)));
+  SLOT=Math.floor((CELL*GRID-16)/3);
+}
+
+/* ═══════════════════════════════════════════════════
+   BREEDS
+═══════════════════════════════════════════════════ */
+const BREEDS=[
+  {name:'Orange Tabby',bg:'#C85A1A',stripe:'#8C2E06', earIn:'#E08080',eyeC:'#C8980A',nose:'#FF8888', pattern:'tabby'  },
+  {name:'Tuxedo',      bg:'#181828',belly:'#FFFFFF',  earIn:'#FF8080',eyeC:'#00E070',nose:'#FFB0C0', pattern:'tuxedo' },
+  {name:'Calico',      bg:'#F0DDBC',patch1:'#C85A1A', patch2:'#181828',earIn:'#FF8888',eyeC:'#29BEFF',nose:'#FFAAB8',pattern:'calico' },
+  {name:'Siamese',     bg:'#EDD9B0',points:'#58300C', earIn:'#C09090',eyeC:'#45D0E0',nose:'#E898B0', pattern:'siamese'},
+  {name:'Russian Blue',bg:'#5A7898',dark:'#364E64',   belly:'#85AAC0',earIn:'#7858C0',eyeC:'#5DDA78',nose:'#C090D8',pattern:'blue'   },
+  {name:'Flame Point', bg:'#FFF0D0',flame:'#FF5200',  earIn:'#FFBCA8',eyeC:'#20C0D8',nose:'#FFB0C0', pattern:'flame'  },
+  {name:'Snow Bengal', bg:'#E8E3DA',spots:'#9A8060',  earIn:'#FFBCA8',eyeC:'#7AD8FF',nose:'#FFBCA8', pattern:'bengal' },
+];
+const BSPOTS=[[.20,.24,.52],[.72,.20,1.22],[.15,.66,.30],[.76,.60,.86],[.45,.46,1.56],[.36,.78,.10],[.65,.82,.92]];
+
+/* ═══════════════════════════════════════════════════
+   SHAPES
+═══════════════════════════════════════════════════ */
+const SHAPES=[
+  {cells:[[0,0]],b:3},
+  {cells:[[0,0],[0,1],[0,2],[0,3]],b:3},
+  {cells:[[0,0],[1,0],[2,0],[3,0]],b:3},
+  {cells:[[0,0],[0,1],[0,2],[0,3],[0,4]],b:3},
+  {cells:[[0,0],[1,0],[2,0],[3,0],[4,0]],b:3},
+  {cells:[[0,0],[0,1]],b:0},
+  {cells:[[0,0],[1,0]],b:0},
+  {cells:[[0,0],[0,1],[1,1],[1,2]],b:0},
+  {cells:[[0,1],[0,2],[1,0],[1,1]],b:0},
+  {cells:[[0,0],[0,1],[0,2]],b:1},
+  {cells:[[0,0],[1,0],[2,0]],b:1},
+  {cells:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],b:1},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],b:1},
+  {cells:[[0,0],[1,0],[1,1]],b:2},
+  {cells:[[0,1],[1,0],[1,1]],b:2},
+  {cells:[[0,0],[0,1],[1,0]],b:2},
+  {cells:[[0,0],[0,1],[1,1]],b:2},
+  {cells:[[0,0],[1,0],[2,0],[3,0],[3,1]],b:2},
+  {cells:[[0,0],[0,1],[0,2],[0,3],[1,0]],b:2},
+  {cells:[[0,0],[0,1],[1,0],[1,1]],b:4},
+  {cells:[[0,0],[0,1],[0,2],[1,1]],b:5},
+  {cells:[[0,1],[1,0],[1,1],[2,1]],b:5},
+  {cells:[[0,1],[1,0],[1,1],[1,2]],b:5},
+  {cells:[[1,0],[1,1],[1,2],[0,1]],b:5},
+  {cells:[[0,1],[1,0],[1,1],[1,2],[2,1]],b:5},
+  {cells:[[0,0],[1,0],[2,0],[2,1]],b:6},
+  {cells:[[0,0],[0,1],[1,0],[2,0]],b:6},
+  {cells:[[0,1],[1,1],[2,0],[2,1]],b:6},
+  {cells:[[0,0],[1,0],[1,1],[1,2]],b:6},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],b:6},
+];
+
+/* ═══════════════════════════════════════════════════
+   PARTICLE SYSTEM
+═══════════════════════════════════════════════════ */
+const pCanvas=document.getElementById('particles');
+const pCtx=pCanvas.getContext('2d');
+let particles=[];
+
+const CAT_COLORS=['#C85A1A','#00E070','#29BEFF','#FFD700','#FF5200','#5DDA78','#E898B0','#7AD8FF','#FFF0D0','#EDD9B0'];
+
+function spawnClearParticles(rowsClr,colsClr){
+  const bp=CELL*GRID;
+  const cellSet=new Set();
+  rowsClr.forEach(r=>{for(let c=0;c<GRID;c++) cellSet.add(r+','+c);});
+  colsClr.forEach(c=>{for(let r=0;r<GRID;r++) cellSet.add(r+','+c);});
+  cellSet.forEach(key=>{
+    const[r,c]=key.split(',').map(Number);
+    const cx=c*CELL+CELL/2, cy=r*CELL+CELL/2;
+    const count=rowsClr.length+colsClr.length>=4?14:8;
+    for(let i=0;i<count;i++){
+      const ang=Math.random()*Math.PI*2;
+      const spd=CELL*(0.06+Math.random()*0.13);
+      particles.push({
+        x:cx,y:cy,
+        vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+        r:2+Math.random()*3.5,
+        color:CAT_COLORS[Math.floor(Math.random()*CAT_COLORS.length)],
+        life:1, decay:.045+Math.random()*.035,
+        spin:Math.random()*0.3-0.15,
+        shape:Math.random()<.5?'circle':'star',
+      });
+    }
+  });
+  if(!particleLoop) startParticleLoop();
+}
+
+let particleLoop=false;
+function startParticleLoop(){
+  particleLoop=true;
+  function tick(){
+    const bp=CELL*GRID;
+    pCtx.clearRect(0,0,bp,bp);
+    particles=particles.filter(p=>p.life>0);
+    particles.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy;
+      p.vy+=0.22; // gravity
+      p.vx*=.94; p.vy*=.94;
+      p.life-=p.decay;
+      p.r*=.97;
+      pCtx.save();
+      pCtx.globalAlpha=Math.max(0,p.life);
+      pCtx.fillStyle=p.color;
+      pCtx.translate(p.x,p.y);
+      pCtx.rotate(p.spin*p.life*10);
+      if(p.shape==='star'){
+        pCtx.beginPath();
+        for(let i=0;i<5;i++){
+          const a=i*Math.PI*2/5-Math.PI/2;
+          const ia=a+Math.PI/5;
+          i===0?pCtx.moveTo(Math.cos(a)*p.r,Math.sin(a)*p.r):pCtx.lineTo(Math.cos(a)*p.r,Math.sin(a)*p.r);
+          pCtx.lineTo(Math.cos(ia)*p.r*.44,Math.sin(ia)*p.r*.44);
+        }
+        pCtx.closePath(); pCtx.fill();
+      } else {
+        pCtx.beginPath(); pCtx.arc(0,0,p.r,0,Math.PI*2); pCtx.fill();
+      }
+      pCtx.restore();
+    });
+    if(particles.length>0) requestAnimationFrame(tick);
+    else { particleLoop=false; pCtx.clearRect(0,0,CELL*GRID,CELL*GRID); }
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ═══════════════════════════════════════════════════
+   SCREEN SHAKE
+═══════════════════════════════════════════════════ */
+function screenShake(){
+  const w=document.getElementById('boardWrap');
+  w.classList.remove('shake'); void w.offsetWidth;
+  w.classList.add('shake');
+  w.addEventListener('animationend',()=>w.classList.remove('shake'),{once:true});
+}
+
+/* ═══════════════════════════════════════════════════
+   FLOATING SCORE TEXT
+═══════════════════════════════════════════════════ */
+function floatScore(pts,x,y){
+  const el=document.createElement('div');
+  el.className='floatPts';
+  el.textContent='+'+pts;
+  el.style.left=x+'px'; el.style.top=y+'px';
+  document.body.appendChild(el);
+  el.addEventListener('animationend',()=>el.remove());
+}
+
+/* ═══════════════════════════════════════════════════
+   DRAWING
+═══════════════════════════════════════════════════ */
+function rrPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.arcTo(x+w,y,x+w,y+r,r); ctx.lineTo(x+w,y+h-r);
+  ctx.arcTo(x+w,y+h,x+w-r,y+h,r); ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r); ctx.lineTo(x,y+r);
+  ctx.arcTo(x,y,x+r,y,r); ctx.closePath();
+}
+function drawPattern(ctx,x,y,w,h,b){
+  ctx.save(); rrPath(ctx,x,y,w,h,6); ctx.clip();
+  const cx=x+w/2,cy=y+h/2;
+  switch(b.pattern){
+    case 'tabby':
+      ctx.fillStyle=b.stripe;
+      [[.30,.054],[.51,.054],[.72,.054]].forEach(([yf,hf])=>ctx.fillRect(x,y+h*yf,w,h*hf));
+      ctx.fillRect(cx-w*.28,y+h*.06,w*.09,h*.12); ctx.fillRect(cx-w*.07,y+h*.04,w*.07,h*.10); ctx.fillRect(cx+w*.08,y+h*.06,w*.09,h*.12);
+      break;
+    case 'tuxedo':
+      ctx.fillStyle=b.belly;
+      ctx.beginPath(); ctx.ellipse(cx,cy+h*.28,w*.26,h*.30,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx,cy+h*.16,w*.34,h*.22,0,0,Math.PI*2); ctx.fill();
+      break;
+    case 'calico':
+      ctx.fillStyle=b.patch1;
+      ctx.beginPath(); ctx.ellipse(x+w*.24,y+h*.35,w*.22,h*.28,.50,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=b.patch2;
+      ctx.beginPath(); ctx.ellipse(x+w*.76,y+h*.65,w*.20,h*.22,-.30,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x+w*.62,y+h*.22,w*.15,h*.16,.80,0,Math.PI*2); ctx.fill();
+      break;
+    case 'siamese':
+      ctx.fillStyle=b.points;
+      ctx.beginPath(); ctx.ellipse(cx,cy+h*.10,w*.32,h*.23,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx-w*.24,y+h*.07,w*.10,h*.09,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx+w*.24,y+h*.07,w*.10,h*.09,0,0,Math.PI*2); ctx.fill();
+      break;
+    case 'blue':{
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,w*.66);
+      g.addColorStop(0,b.belly); g.addColorStop(1,b.dark);
+      ctx.fillStyle=g; ctx.fillRect(x,y,w,h); break;}
+    case 'flame':
+      ctx.fillStyle=b.flame;
+      ctx.beginPath(); ctx.ellipse(cx-w*.22,y+h*.17,w*.11,h*.10,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx+w*.22,y+h*.17,w*.11,h*.10,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx,y+h*.82,w*.17,h*.10,0,0,Math.PI*2); ctx.fill();
+      break;
+    case 'bengal':
+      ctx.fillStyle=b.spots;
+      BSPOTS.forEach(([sx,sy,a])=>{
+        ctx.beginPath(); ctx.ellipse(x+w*sx,y+h*sy,w*.10,h*.07,a,0,Math.PI*2); ctx.fill();
+      });
+      break;
+  }
+  ctx.restore();
+}
+function drawCat(ctx,px,py,size,bIdx){
+  const b=BREEDS[bIdx], pad=size>30?2:1;
+  const x=px+pad,y=py+pad,w=size-pad*2,h=size-pad*2;
+  const cx=x+w/2,cy=y+h/2, small=size<28;
+  ctx.save();
+  rrPath(ctx,x,y,w,h,small?4:6); ctx.fillStyle=b.bg; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1; ctx.stroke();
+  drawPattern(ctx,x,y,w,h,b);
+  if(!small){
+    const ew=w*.26,eh=h*.18,eby=y+h*.14;
+    function ear(ex){
+      ctx.fillStyle=b.bg; ctx.beginPath(); ctx.moveTo(ex,eby); ctx.lineTo(ex+ew,eby); ctx.lineTo(ex+ew/2,eby-eh); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=b.earIn; const ip=ew*.20;
+      ctx.beginPath(); ctx.moveTo(ex+ip,eby-1); ctx.lineTo(ex+ew-ip,eby-1); ctx.lineTo(ex+ew/2,eby-eh*.65); ctx.closePath(); ctx.fill();
+    }
+    ear(x+w*.05); ear(x+w*.69);
+  }
+  const fy=cy+h*.06, erx=w*(small?.14:.11), ery=h*(small?.14:.125);
+  const elX=cx-w*.20, erX=cx+w*.20, eyY=fy-h*.10;
+  ctx.fillStyle=b.eyeC;
+  ctx.beginPath(); ctx.ellipse(elX,eyY,erx,ery,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(erX,eyY,erx,ery,0,0,Math.PI*2); ctx.fill();
+  if(!small){
+    ctx.fillStyle='#111';
+    ctx.beginPath(); ctx.ellipse(elX,eyY,erx*.33,ery*.88,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(erX,eyY,erx*.33,ery*.88,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.75)';
+    ctx.beginPath(); ctx.ellipse(elX-erx*.22,eyY-ery*.28,erx*.26,ery*.26,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(erX-erx*.22,eyY-ery*.28,erx*.26,ery*.26,0,0,Math.PI*2); ctx.fill();
+    const ny=fy+h*.06;
+    ctx.fillStyle=b.nose; ctx.beginPath(); ctx.moveTo(cx,ny+h*.05); ctx.lineTo(cx-w*.07,ny); ctx.lineTo(cx+w*.07,ny); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.42)'; ctx.lineWidth=w*.024; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(cx,ny+h*.052); ctx.bezierCurveTo(cx-w*.03,ny+h*.10,cx-w*.12,ny+h*.13,cx-w*.14,ny+h*.12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx,ny+h*.052); ctx.bezierCurveTo(cx+w*.03,ny+h*.10,cx+w*.12,ny+h*.13,cx+w*.14,ny+h*.12); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.80)'; ctx.lineWidth=.85; ctx.lineCap='round';
+    const wy=ny+h*.022;
+    [-1,0,1].forEach(i=>{
+      ctx.beginPath(); ctx.moveTo(cx-w*.07,wy+i*h*.048); ctx.lineTo(cx-w*.46,wy+i*h*.048+i*h*.018); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx+w*.07,wy+i*h*.048); ctx.lineTo(cx+w*.46,wy+i*h*.048+i*h*.018); ctx.stroke();
+    });
+  } else {
+    ctx.fillStyle='rgba(0,0,0,.7)';
+    ctx.beginPath(); ctx.ellipse(elX,eyY,erx*.4,ery*.4,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(erX,eyY,erx*.4,ery*.4,0,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════
+   BOARD RENDER
+═══════════════════════════════════════════════════ */
+const bCanvas=document.getElementById('board');
+const bCtx=bCanvas.getContext('2d');
+const dCanvas=document.getElementById('drag');
+const dCtx=dCanvas.getContext('2d');
+
+function drawBoard(){
+  const bp=CELL*GRID;
+  bCtx.clearRect(0,0,bp,bp);
+  rrPath(bCtx,0,0,bp,bp,10); bCtx.fillStyle='rgba(8,4,22,.96)'; bCtx.fill();
+  bCtx.strokeStyle='rgba(255,255,255,.052)'; bCtx.lineWidth=1;
+  for(let i=0;i<=GRID;i++){
+    bCtx.beginPath(); bCtx.moveTo(i*CELL,0); bCtx.lineTo(i*CELL,bp); bCtx.stroke();
+    bCtx.beginPath(); bCtx.moveTo(0,i*CELL); bCtx.lineTo(bp,i*CELL); bCtx.stroke();
+  }
+  // near-complete row/col highlight (one cell away from clearing)
+  for(let r=0;r<GRID;r++){
+    const filled=board[r].filter(v=>v!==null).length;
+    if(filled===GRID-1){
+      bCtx.fillStyle='rgba(255,220,0,.07)';
+      bCtx.fillRect(0,r*CELL,bp,CELL);
+    }
+  }
+  for(let c=0;c<GRID;c++){
+    const filled=board.filter(row=>row[c]!==null).length;
+    if(filled===GRID-1){
+      bCtx.fillStyle='rgba(255,220,0,.07)';
+      bCtx.fillRect(c*CELL,0,CELL,bp);
+    }
+  }
+  if(boardHL){
+    const allOk=boardHL.every(h=>h.ok);
+    boardHL.filter(h=>h.r>=0&&h.r<GRID&&h.c>=0&&h.c<GRID).forEach(({r,c})=>{
+      bCtx.fillStyle=allOk?'rgba(60,255,110,.20)':'rgba(255,55,55,.17)';
+      bCtx.fillRect(c*CELL+1,r*CELL+1,CELL-2,CELL-2);
+      if(allOk){bCtx.strokeStyle='rgba(60,255,110,.48)'; bCtx.lineWidth=1.5; bCtx.strokeRect(c*CELL+1.5,r*CELL+1.5,CELL-3,CELL-3);}
+    });
+  }
+  for(let r=0;r<GRID;r++)
+    for(let c=0;c<GRID;c++)
+      if(board[r][c]!==null) drawCat(bCtx,c*CELL,r*CELL,CELL,board[r][c]);
+}
+
+/* ═══════════════════════════════════════════════════
+   PIECE UTILS
+═══════════════════════════════════════════════════ */
+function pBounds(cells){
+  const rs=cells.map(c=>c[0]),cs=cells.map(c=>c[1]);
+  return{minR:Math.min(...rs),maxR:Math.max(...rs),minC:Math.min(...cs),maxC:Math.max(...cs)};
+}
+function drawPreview(idx){
+  const cvs=document.getElementById('pc'+idx), ctx=cvs.getContext('2d');
+  const sl=document.getElementById('s'+idx);
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  const p=pieces[idx];
+  if(!p){sl.classList.add('empty');return;}
+  sl.classList.remove('empty');
+  const{minR,maxR,minC,maxC}=pBounds(p.cells);
+  const pW=maxC-minC+1,pH=maxR-minR+1, pad=10;
+  const cs=Math.min((cvs.width-pad*2)/pW,(cvs.height-pad*2)/pH);
+  const ox=pad+(cvs.width-pad*2-pW*cs)/2;
+  const oy=pad+(cvs.height-pad*2-pH*cs)/2;
+  p.cells.forEach(([r,c])=>drawCat(ctx,ox+(c-minC)*cs,oy+(r-minR)*cs,cs,p.breed));
+}
+
+/* ═══════════════════════════════════════════════════
+   DRAG RENDERING
+   Piece floats ABOVE the finger so it stays visible.
+═══════════════════════════════════════════════════ */
+const LIFT=12;
+function renderDragPiece(p,mx,my){
+  const{minR,maxR,minC,maxC}=pBounds(p.cells);
+  const pW=maxC-minC+1,pH=maxR-minR+1;
+  dCanvas.width=pW*CELL; dCanvas.height=pH*CELL;
+  dCtx.clearRect(0,0,dCanvas.width,dCanvas.height);
+  p.cells.forEach(([r,c])=>drawCat(dCtx,(c-minC)*CELL,(r-minR)*CELL,CELL,p.breed));
+  dCanvas.style.left=(mx-pW*CELL/2)+'px';
+  dCanvas.style.top=(my-pH*CELL-LIFT)+'px';
+  dCanvas.style.display='block';
+}
+function boardPos(p,mx,my){
+  const{minR,maxR,minC,maxC}=pBounds(p.cells);
+  const pW=maxC-minC+1,pH=maxR-minR+1;
+  const rect=bCanvas.getBoundingClientRect();
+  const col=Math.round((mx-pW*CELL/2-rect.left)/CELL)-minC;
+  const row=Math.round((my-pH*CELL-LIFT-rect.top)/CELL)-minR;
+  return{row,col};
+}
+function updateHL(p,mx,my){
+  const{row,col}=boardPos(p,mx,my);
+  const ok=canPlace(p,row,col);
+  boardHL=p.cells.map(([r,c])=>({r:row+r,c:col+c,ok}));
+}
+
+/* ═══════════════════════════════════════════════════
+   GAME STATE
+═══════════════════════════════════════════════════ */
+let board=[],pieces=[null,null,null];
+let score=0,best=parseInt(localStorage.getItem('catblast_best')||'0');
+let drag=null,boardHL=null;
+// stats
+let streak=0,maxStreak=0,maxCombo=0,linesCleared=0;
+let newBestThisGame=false;
+
+/* ── danger mode ── */
+function updateDanger(){
+  const total=board.flat().filter(v=>v!==null).length;
+  const pct=total/(GRID*GRID);
+  document.getElementById('board').classList.toggle('danger',pct>.65);
+}
+
+/* ── streak UI ── */
+function updateStreak(n){
+  streak=n; if(streak>maxStreak) maxStreak=streak;
+  const badge=document.getElementById('streakBadge');
+  if(streak>=3){
+    badge.classList.add('show');
+    document.getElementById('streakNum').textContent='×'+Math.min(streak,9);
+  } else {
+    badge.classList.remove('show');
+  }
+}
+
+/* ─────────────────────────────────────────────────
+   GAME LOGIC
+───────────────────────────────────────────────── */
+function canPlace(p,row,col){
+  return p.cells.every(([r,c])=>{
+    const tr=row+r,tc=col+c;
+    return tr>=0&&tr<GRID&&tc>=0&&tc<GRID&&board[tr][tc]===null;
+  });
+}
+function canFitAnywhere(p){
+  for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++) if(canPlace(p,r,c)) return true;
+  return false;
+}
+/* ══ FIXED: checkGameOver ONLY called after board is updated ══ */
+function checkGameOver(){
+  const rem=pieces.filter(p=>p!==null);
+  return rem.length>0 && !rem.some(canFitAnywhere);
+}
+
+/* placePiece — fully async-safe.
+   onDone is called AFTER the board is visually and logically
+   cleared, so checkGameOver always sees the correct state. */
+function placePiece(p,row,col,onDone){
+  p.cells.forEach(([r,c])=>{board[row+r][col+c]=p.breed;});
+
+  const rowsClr=[],colsClr=[];
+  for(let r=0;r<GRID;r++) if(board[r].every(v=>v!==null)) rowsClr.push(r);
+  for(let c=0;c<GRID;c++) if(board.every(row=>row[c]!==null)) colsClr.push(c);
+  const total=rowsClr.length+colsClr.length;
+
+  let pts=p.cells.length*10;
+
+  if(total>0){
+    // streak multiplier (addictive reward escalation)
+    const streakMult=streak>=10?3:streak>=5?2:streak>=3?1.5:1;
+    pts+=Math.round(total*100*Math.max(total,1)*streakMult);
+    linesCleared+=total;
+    if(total>maxCombo) maxCombo=total;
+
+    soundClear(total);
+    if(total>=3) haptic(total>=4?[30,30,60,30,80]:[20,20,40]);
+    if(total>=3) screenShake();
+    spawnClearParticles(rowsClr,colsClr);
+    showCombo(total, streakMult);
+
+    animateClear(rowsClr,colsClr,()=>{
+      rowsClr.forEach(r=>{for(let c=0;c<GRID;c++) board[r][c]=null;});
+      colsClr.forEach(c=>{for(let r=0;r<GRID;r++) board[r][c]=null;});
+      updateDanger();
+      drawBoard();
+      if(onDone) onDone();          // ← game over check happens here
+    });
+  } else {
+    soundPlace();
+    haptic(8);
+    updateDanger();
+    drawBoard();
+    if(onDone) onDone();
+  }
+
+  score+=pts;
+  updateScoreDisplay(pts,row,col);
+}
+
+function animateClear(rows,cols,cb){
+  const cells=new Set();
+  rows.forEach(r=>{for(let c=0;c<GRID;c++) cells.add(r+','+c);});
+  cols.forEach(c=>{for(let r=0;r<GRID;r++) cells.add(r+','+c);});
+  let frame=0;
+  (function tick(){
+    drawBoard();
+    cells.forEach(key=>{
+      const[r,c]=key.split(',').map(Number);
+      bCtx.fillStyle=frame%2===0?'rgba(255,238,50,.9)':'rgba(255,255,255,.30)';
+      bCtx.fillRect(c*CELL,r*CELL,CELL,CELL);
+    });
+    if(++frame<10) requestAnimationFrame(tick); else cb();
+  })();
+}
+
+function updateScoreDisplay(pts,placedRow,placedCol){
+  const wasB=score-pts;
+  document.getElementById('scoreEl').textContent=score;
+  if(score>best){
+    best=score;
+    localStorage.setItem('catblast_best',best);
+    document.getElementById('bestEl').textContent=best;
+    // animate best score
+    const bEl=document.getElementById('bestEl');
+    bEl.classList.remove('pop'); void bEl.offsetWidth; bEl.classList.add('pop');
+    setTimeout(()=>bEl.classList.remove('pop'),150);
+    // new best ribbon (only once per game)
+    if(!newBestThisGame && wasB>0){
+      newBestThisGame=true;
+      soundHighScore();
+      haptic([20,30,20,30,60]);
+      const rb=document.getElementById('bestRibbon');
+      rb.style.display='block';
+      setTimeout(()=>{rb.style.display='none';},2200);
+    }
+  }
+  // floating score text near board
+  const rect=bCanvas.getBoundingClientRect();
+  const cx=rect.left+rect.width/2;
+  const cy=rect.top+Math.max(0,placedRow-1)*CELL;
+  floatScore(pts,cx,cy);
+}
+
+/* ═══════════════════════════════════════════════════
+   COMBO DISPLAY
+═══════════════════════════════════════════════════ */
+const MSGS=['Paw-some! 🐾','Purr-fect! 😸','Claw-some! 😻','Fur-ocious! 🐱','MEOW-velous! ✨','CAT-ASTROPHIC! 🎉'];
+function showCombo(lines,mult){
+  const el=document.getElementById('combo');
+  let txt=MSGS[Math.min(lines-1,MSGS.length-1)];
+  if(mult>1) txt+=' ×'+mult+'!';
+  el.textContent=txt;
+  el.style.animation='none'; el.style.display='block'; void el.offsetHeight;
+  el.style.animation='comboFly 1.6s ease forwards';
+  setTimeout(()=>{el.style.display='none';},1600);
+}
+
+/* ═══════════════════════════════════════════════════
+   DRAG INTERACTION
+═══════════════════════════════════════════════════ */
+function startDrag(idx,mx,my){
+  if(!pieces[idx]) return;
+  drag={idx,piece:pieces[idx]};
+  document.getElementById('s'+idx).classList.add('lift');
+  renderDragPiece(pieces[idx],mx,my);
+  updateHL(pieces[idx],mx,my);
+  drawBoard();
+}
+function moveDrag(mx,my){
+  if(!drag) return;
+  renderDragPiece(drag.piece,mx,my);
+  updateHL(drag.piece,mx,my);
+  drawBoard();
+}
+function endDrag(mx,my){
+  if(!drag) return;
+  const{row,col}=boardPos(drag.piece,mx,my);
+  const di=drag.idx, dp=drag.piece;
+  document.getElementById('s'+di).classList.remove('lift');
+  dCanvas.style.display='none'; boardHL=null; drag=null;
+
+  if(canPlace(dp,row,col)){
+    // update streak
+    updateStreak(streak+1);
+
+    placePiece(dp,row,col,()=>{
+      // ══ This callback fires AFTER lines are cleared and board is updated ══
+      pieces[di]=null;
+      if(pieces.every(p=>p===null)) refill();
+      for(let i=0;i<3;i++) drawPreview(i);
+      if(checkGameOver()) setTimeout(gameOver,550);
+    });
+  } else {
+    updateStreak(0);
+    drawBoard();
+  }
+}
+function cancelDrag(){
+  if(!drag) return;
+  document.getElementById('s'+drag.idx).classList.remove('lift');
+  dCanvas.style.display='none'; boardHL=null; drag=null; drawBoard();
+}
+
+/* ── events ── */
+const tray=document.getElementById('tray');
+tray.addEventListener('mousedown',e=>{
+  const sl=e.target.closest('.slot'); if(!sl) return;
+  const idx=parseInt(sl.id.slice(1)); if(isNaN(idx)) return;
+  e.preventDefault(); startDrag(idx,e.clientX,e.clientY);
+});
+window.addEventListener('mousemove',e=>{if(drag) moveDrag(e.clientX,e.clientY);});
+window.addEventListener('mouseup',  e=>{if(drag) endDrag(e.clientX,e.clientY);});
+tray.addEventListener('touchstart',e=>{
+  const sl=e.target.closest('.slot'); if(!sl) return;
+  const idx=parseInt(sl.id.slice(1)); if(isNaN(idx)) return;
+  e.preventDefault();
+  const t=e.touches[0]; startDrag(idx,t.clientX,t.clientY);
+},{passive:false});
+window.addEventListener('touchmove',e=>{
+  if(!drag) return; e.preventDefault();
+  const t=e.touches[0]; moveDrag(t.clientX,t.clientY);
+},{passive:false});
+window.addEventListener('touchend',e=>{
+  if(!drag) return;
+  const t=e.changedTouches[0]; endDrag(t.clientX,t.clientY);
+});
+window.addEventListener('touchcancel',cancelDrag);
+
+/* ═══════════════════════════════════════════════════
+   FLOW
+═══════════════════════════════════════════════════ */
+function refill(){
+  // ensure at least one placeable piece so first-draw is never stuck
+  let attempts=0;
+  do{
+    for(let i=0;i<3;i++){
+      const s=SHAPES[Math.floor(Math.random()*SHAPES.length)];
+      pieces[i]={cells:s.cells,breed:s.b};
+    }
+    attempts++;
+  } while(attempts<30 && !pieces.some(canFitAnywhere));
+}
+
+function gameOver(){
+  soundGameOver();
+  haptic([40,40,80]);
+  document.getElementById('finalScore').textContent=score;
+  document.getElementById('goBest').textContent=best;
+  document.getElementById('goLines').textContent=linesCleared;
+  document.getElementById('goMaxCombo').textContent=maxCombo;
+  document.getElementById('goMaxStreak').textContent=maxStreak;
+  document.getElementById('go').classList.add('show');
+  window.parent.postMessage({type:'GAME_OVER',score:score},'*');
+}
+
+function startGame(){
+  board=Array.from({length:GRID},()=>Array(GRID).fill(null));
+  score=0; streak=0; maxStreak=0; maxCombo=0; linesCleared=0; newBestThisGame=false;
+  document.getElementById('scoreEl').textContent='0';
+  document.getElementById('bestEl').textContent=best;
+  document.getElementById('streakBadge').classList.remove('show');
+  document.getElementById('board').classList.remove('danger');
+  document.getElementById('go').classList.remove('show');
+  pieces=[null,null,null]; refill();
+  for(let i=0;i<3;i++) drawPreview(i);
+  drawBoard();
+}
+
+/* ═══════════════════════════════════════════════════
+   INIT + RESIZE
+═══════════════════════════════════════════════════ */
+function applyLayout(){
+  calcSizes();
+  const bp=CELL*GRID;
+  bCanvas.width=bp; bCanvas.height=bp;
+  pCanvas.width=bp; pCanvas.height=bp;
+  for(let i=0;i<3;i++){
+    const sl=document.getElementById('s'+i);
+    sl.style.width=SLOT+'px'; sl.style.height=SLOT+'px';
+    const cv=document.getElementById('pc'+i);
+    cv.width=SLOT; cv.height=SLOT;
+  }
+}
+function init(){
+  document.getElementById('bestEl').textContent=best;
+  applyLayout(); startGame();
+}
+let rTimer;
+window.addEventListener('resize',()=>{
+  clearTimeout(rTimer); rTimer=setTimeout(()=>{
+    applyLayout(); drawBoard();
+    for(let i=0;i<3;i++) drawPreview(i);
+  },130);
+});
+init();
+</script>
+</body>
+</html>
