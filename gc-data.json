@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updatedAt": 1773598356724,
+  "updatedAt": 1773598463654,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -20,7 +20,16 @@
       "status": "pending"
     }
   ],
-  "scores": {},
+  "scores": {
+    "custom-cat-blast-mms2fr2j": [
+      {
+        "email": "ahathaway21@gmail.com",
+        "displayName": "ahathaway21",
+        "score": 520,
+        "date": 1773598463654
+      }
+    ]
+  },
   "customGamesMeta": [
     {
       "id": "custom-cat-blast-mms2fr2j",
