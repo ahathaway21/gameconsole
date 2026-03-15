@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Game Center</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Syne:wght@400;500;600;700&display=swap');
@@ -13,11 +13,10 @@ body{background:#07070f;color:#f0f0ff;font-family:'Syne',system-ui,sans-serif;mi
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
-@keyframes popIn{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .screen{animation:slideUp .28s ease-out}
 .card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:18px}
-.btn{border:none;border-radius:11px;padding:13px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:transform .12s,filter .12s;color:#fff}
+.btn{display:inline-block;border:none;border-radius:11px;padding:13px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:transform .12s,filter .12s;color:#fff;text-align:center;line-height:1.2}
 .btn:active{transform:scale(.96)}
 .btn:hover{filter:brightness(1.15)}
 .btn-ghost{background:rgba(255,255,255,.07);color:#f0f0ff}
@@ -28,859 +27,695 @@ body{background:#07070f;color:#f0f0ff;font-family:'Syne',system-ui,sans-serif;mi
 .inp:focus{border-color:rgba(167,139,250,.6)}
 .logo-font{font-family:'Orbitron',monospace;letter-spacing:.05em}
 .tag{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.04em}
+.err-msg{color:#f87171;font-size:13px;margin:0 0 10px}
+.ok-msg{color:#4ade80;font-size:13px;margin:0 0 10px}
+.spinner{width:34px;height:34px;border:3px solid rgba(167,139,250,.2);border-top:3px solid #a78bfa;border-radius:50%;animation:spin .7s linear infinite}
 #game-overlay{position:fixed;inset:0;z-index:9999;display:none;flex-direction:column;background:#000}
 #game-overlay.active{display:flex}
+#game-back-bar{background:rgba(0,0,0,.92);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
 #game-iframe{flex:1;border:none;width:100%;height:100%}
-#game-back-bar{background:rgba(0,0,0,.9);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
-#score-panel{position:fixed;inset:0;z-index:10000;background:rgba(7,7,15,.95);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#score-panel{position:fixed;inset:0;z-index:10000;background:rgba(7,7,15,.96);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow-y:auto}
 #score-panel.active{display:flex;animation:fadeIn .3s ease-out}
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     CAT BLAST GAME  (embedded as template — safe from HTML parser)
-═══════════════════════════════════════════════════════════════════ -->
-<div id="cat-blast-tpl" style="display:none"></div>
-
-<div id="root"></div>
-
-<!-- Game overlay (iframe host) -->
 <div id="game-overlay">
   <div id="game-back-bar">
-    <button id="game-back-btn" class="btn btn-ghost" style="padding:8px 14px;font-size:13px">← Hub</button>
+    <button id="game-back-btn" class="btn btn-ghost" style="padding:8px 14px;font-size:13px">&#8592; Hub</button>
     <div id="game-title-bar" class="logo-font" style="font-size:13px;color:rgba(255,255,255,.5)"></div>
     <div style="width:80px"></div>
   </div>
-  <iframe id="game-iframe" sandbox="allow-scripts allow-same-origin" allowtransparency="true"></iframe>
+  <iframe id="game-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
 </div>
 
-<!-- Score panel (shown after game over) -->
 <div id="score-panel">
   <div id="sp-emoji" style="font-size:64px;margin-bottom:12px"></div>
   <h2 class="logo-font" style="font-size:22px;font-weight:900;margin-bottom:6px">GAME OVER</h2>
   <p style="color:rgba(255,255,255,.4);font-size:13px;margin-bottom:14px">Your score</p>
   <div id="sp-score" class="logo-font" style="font-size:54px;font-weight:900;color:#fbbf24;line-height:1;text-shadow:0 0 20px rgba(251,191,36,.5)"></div>
   <div id="sp-rank" style="font-size:14px;font-weight:600;margin-top:10px"></div>
-  <div id="sp-leaderboard" style="width:100%;max-width:360px;margin-top:24px"></div>
-  <div style="display:flex;gap:12px;margin-top:24px">
-    <button id="sp-back" class="btn btn-ghost" style="flex:1">← Hub</button>
-    <button id="sp-again" class="btn btn-purple" style="flex:1">🔄 Play Again</button>
+  <div id="sp-leaderboard" style="width:100%;max-width:360px;margin-top:20px"></div>
+  <div style="display:flex;gap:12px;margin-top:24px;width:100%;max-width:360px">
+    <button id="sp-back" class="btn btn-ghost" style="flex:1">&#8592; Hub</button>
+    <button id="sp-again" class="btn btn-purple" style="flex:1">&#x1F504; Play Again</button>
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<div id="app"></div>
 
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef } = React;
-
-// ═══════════════════════════════════════════════════════
-// CAT BLAST HTML  (</script> escaped as <\/script>)
-// ═══════════════════════════════════════════════════════
-const CAT_BLAST_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="game-name" content="Cat Blast">
-<meta name="game-emoji" content="🐱">
-<meta name="game-description" content="Block Blast with 7 cat breeds! Fill rows and columns to clear them and score.">
-<title>Cat Blast</title>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}
-body{background:#0c0620;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden;font-family:'Fredoka One',cursive;padding:8px 0 0}
-#sbar{display:flex;gap:12px;margin-bottom:8px;padding:0 8px;width:100%;justify-content:center}
-.sbox{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:5px 22px;text-align:center}
-.slbl{font-size:9px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase}
-.sval{font-size:1.7rem;color:#FFD700;line-height:1.2}
-canvas{display:block;border-radius:10px}
-#tray{margin-top:10px}
-#go{position:fixed;inset:0;background:rgba(5,1,18,.88);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20}
-#go.show{display:flex}
-.got{font-size:2.2rem;color:#FFD700}
-.gos{font-size:3.2rem;color:#fff;line-height:1}
-.gob{background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:14px;padding:14px 36px;color:#fff;font-size:1.1rem;font-family:'Fredoka One',cursive;cursor:pointer;margin-top:4px}
-</style>
-</head>
-<body>
-<div id="sbar">
-  <div class="sbox"><div class="slbl">SCORE</div><div class="sval" id="sel">0</div></div>
-  <div class="sbox"><div class="slbl">BEST</div><div class="sval" id="bel">0</div></div>
-</div>
-<canvas id="bc"></canvas>
-<canvas id="tc" style="margin-top:10px"></canvas>
-<div id="go">
-  <div class="got">GAME OVER 🐱</div>
-  <div class="gos" id="fs">0</div>
-  <button class="gob" onclick="restart()">PLAY AGAIN</button>
-</div>
 <script>
-const GRID=9;let CELL=40;
-let score=0,best=+(localStorage.getItem('cb:best')||0);
-let board=[],pieces=[null,null,null];
-let drag=null,dragIdx=-1,dragX=0,dragY=0,prev=null;
-const sel=document.getElementById('sel');
-const bel=document.getElementById('bel');
-bel.textContent=best;
-const bc=document.getElementById('bc');
-const tc=document.getElementById('tc');
-const bx=bc.getContext('2d');
-const tx=tc.getContext('2d');
+'use strict';
 
-function resize(){
-  const mw=Math.min(window.innerWidth-16,420);
-  CELL=Math.floor(mw/GRID);
-  bc.width=bc.height=CELL*GRID;
-  tc.width=CELL*GRID;tc.height=Math.ceil(CELL*3.2);
+/* ================================================================
+   CONFIG
+================================================================ */
+var FOUNDER_EMAIL = 'ahathaway21@gmail.com';
+
+var BUILT_IN_GAMES = [{
+  id:'cat-blast', name:'Cat Blast', emoji:'\uD83D\uDC31',
+  description:'Block Blast with 7 cat breeds! Fill rows & columns to clear them.',
+  bg:'linear-gradient(135deg,#7c3aed,#be185d)', accent:'#f472b6', builtin:true
+}];
+
+/* ================================================================
+   STORAGE
+================================================================ */
+function gsGet(k){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function gsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+/* ================================================================
+   CRYPTO  — SHA-256 password hashing
+================================================================ */
+function hashPwd(pwd){
+  var data = new TextEncoder().encode(pwd+':gc-salt-2025');
+  return crypto.subtle.digest('SHA-256',data).then(function(buf){
+    return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  });
 }
 
-const B=[
-  {n:'Orange Tabby',bg:'#F97316',dt:'#C2410C',ey:'#16A34A',t:'stripe'},
-  {n:'Tuxedo',bg:'#1c1c24',dt:'#FFFFFF',ey:'#22C55E',t:'chest'},
-  {n:'Calico',bg:'#FEF3C7',dt:'#F97316',ey:'#3B82F6',t:'patch'},
-  {n:'Siamese',bg:'#FDE68A',dt:'#78350F',ey:'#60A5FA',t:'point'},
-  {n:'Russian Blue',bg:'#6B7280',dt:'#9CA3AF',ey:'#4ADE80',t:'shim'},
-  {n:'Flame Point',bg:'#F1F5F9',dt:'#F97316',ey:'#93C5FD',t:'flame'},
-  {n:'Snow Bengal',bg:'#F8FAFC',dt:'#475569',ey:'#A78BFA',t:'spot'},
-];
+/* ================================================================
+   HTML ESCAPE
+================================================================ */
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-const SH=[
-  {b:3,c:[[0,0]]},
-  {b:3,c:[[0,0],[0,1],[0,2]]},{b:3,c:[[0,0],[1,0],[2,0]]},
-  {b:3,c:[[0,0],[0,1],[0,2],[0,3]]},{b:3,c:[[0,0],[1,0],[2,0],[3,0]]},
-  {b:0,c:[[0,0],[0,1],[1,1],[1,2]]},{b:0,c:[[0,1],[0,2],[1,0],[1,1]]},
-  {b:0,c:[[0,0],[1,0],[1,1],[2,1]]},{b:0,c:[[0,1],[1,0],[1,1],[2,0]]},
-  {b:1,c:[[0,0],[0,1],[1,0],[1,1]]},
-  {b:1,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]},
-  {b:1,c:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]]},
-  {b:2,c:[[0,0],[1,0],[1,1]]},{b:2,c:[[0,0],[0,1],[1,0]]},
-  {b:2,c:[[0,0],[1,0],[2,0],[2,1]]},{b:2,c:[[0,0],[0,1],[0,2],[1,0]]},
-  {b:2,c:[[0,2],[1,2],[2,0],[2,1],[2,2]]},{b:2,c:[[0,0],[1,0],[2,0],[0,1],[0,2]]},
-  {b:4,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]},
-  {b:4,c:[[0,0],[0,1],[0,2],[0,3],[0,4]]},{b:4,c:[[0,0],[1,0],[2,0],[3,0],[4,0]]},
-  {b:5,c:[[0,0],[0,1],[0,2],[1,1]]},{b:5,c:[[0,1],[1,0],[1,1],[2,1]]},
-  {b:5,c:[[0,1],[1,0],[1,1],[1,2],[2,1]]},
-  {b:6,c:[[0,0],[1,0],[2,0],[2,1],[2,2]]},{b:6,c:[[0,0],[0,1],[0,2],[1,2],[2,2]]},
-  {b:6,c:[[0,0],[0,1],[1,0],[2,0],[2,1]]},{b:6,c:[[0,1],[1,1],[2,0],[2,1]]},
-];
+/* ================================================================
+   APP STATE
+================================================================ */
+var S = {
+  screen:'boot',
+  user:null,
+  scores:{},
+  customGames:[],
+  boardGameId:null
+};
 
-function cat(ctx,px,py,bi,sz){
-  const br=B[bi],r=sz*.12,half=sz*.5;
-  ctx.save();
-  ctx.fillStyle=br.bg;
-  ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.fill();
-  if(br.t==='stripe'){
-    ctx.strokeStyle=br.dt;ctx.lineWidth=Math.max(1,sz*.07);
-    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(px+sz*.18,py+sz*(.22+i*.22));ctx.lineTo(px+sz*.82,py+sz*(.22+i*.22));ctx.stroke();}
-  }else if(br.t==='chest'){
-    ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+sz*.72,sz*.22,sz*.17,0,0,Math.PI*2);ctx.fill();
-  }else if(br.t==='patch'){
-    ctx.fillStyle=br.dt;ctx.beginPath();ctx.roundRect(px+sz*.54,py+sz*.1,sz*.34,sz*.32,sz*.05);ctx.fill();
-    ctx.fillStyle='#92400E';ctx.beginPath();ctx.roundRect(px+sz*.1,py+sz*.54,sz*.28,sz*.28,sz*.05);ctx.fill();
-  }else if(br.t==='point'){
-    ctx.fillStyle=br.dt;
-    ctx.beginPath();ctx.roundRect(px,py,sz*.38,sz*.38,r);ctx.fill();
-    ctx.beginPath();ctx.roundRect(px+sz*.62,py,sz*.38,sz*.38,r);ctx.fill();
-    ctx.beginPath();ctx.roundRect(px,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();
-    ctx.beginPath();ctx.roundRect(px+sz*.62,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();
-  }else if(br.t==='shim'){
-    ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+half,sz*.3,sz*.36,Math.PI/4,0,Math.PI*2);ctx.fill();
-  }else if(br.t==='flame'){
-    ctx.fillStyle=br.dt;
-    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(px+sz*(.18+i*.28),py);ctx.lineTo(px+sz*(.12+i*.28),py-sz*.12);ctx.lineTo(px+sz*(.34+i*.28),py);ctx.closePath();ctx.fill();}
-  }else if(br.t==='spot'){
-    ctx.fillStyle=br.dt;
-    [[.24,.18],[.62,.13],[.7,.48],[.18,.58],[.52,.62]].forEach(([sx,sy])=>{ctx.beginPath();ctx.ellipse(px+sz*sx,py+sz*sy,sz*.07,sz*.05,Math.PI/5,0,Math.PI*2);ctx.fill();});
+function allGames(){ return BUILT_IN_GAMES.concat(S.customGames); }
+
+function loadScores(){
+  var games=allGames(), s={};
+  games.forEach(function(g){
+    var raw=gsGet('gc:scores:'+g.id)||[];
+    s[g.id]=raw.sort(function(a,b){return b.score-a.score;}).slice(0,5);
+  });
+  S.scores=s;
+}
+
+function submitScore(gameId,pts){
+  var raw=gsGet('gc:scores:'+gameId)||[];
+  var entry={email:S.user.email,displayName:S.user.displayName,score:pts,date:Date.now()};
+  var updated=raw.concat([entry]);
+  gsSet('gc:scores:'+gameId,updated);
+  var top5=updated.sort(function(a,b){return b.score-a.score;}).slice(0,5);
+  var rank=-1;
+  top5.forEach(function(s,i){ if(s.email===S.user.email&&s.score===pts) rank=i+1; });
+  S.scores[gameId]=top5;
+  return {top5:top5,rank:rank};
+}
+
+/* ================================================================
+   ROUTER
+================================================================ */
+function go(screen,extra){
+  S.screen=screen;
+  if(extra){ Object.keys(extra).forEach(function(k){ S[k]=extra[k]; }); }
+  render();
+}
+
+function render(){
+  var app=document.getElementById('app');
+  if(!app) return;
+  switch(S.screen){
+    case 'boot':   renderBoot(app);   break;
+    case 'login':  renderLogin(app);  break;
+    case 'hub':    renderHub(app);    break;
+    case 'board':  renderBoard(app);  break;
+    case 'invite': renderInvite(app); break;
+    case 'upload': renderUpload(app); break;
+    default:       renderBoot(app);
   }
-  const ec=bi===1?'#1c1c24':br.dt;
-  ctx.fillStyle=ec;
-  ctx.beginPath();ctx.moveTo(px+sz*.15,py+sz*.1);ctx.lineTo(px+sz*.06,py-sz*.11);ctx.lineTo(px+sz*.33,py+sz*.1);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(px+sz*.67,py+sz*.1);ctx.lineTo(px+sz*.94,py-sz*.11);ctx.lineTo(px+sz*.85,py+sz*.1);ctx.closePath();ctx.fill();
-  ctx.fillStyle='rgba(253,164,175,.6)';
-  ctx.beginPath();ctx.moveTo(px+sz*.17,py+sz*.1);ctx.lineTo(px+sz*.1,py-sz*.04);ctx.lineTo(px+sz*.29,py+sz*.1);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(px+sz*.71,py+sz*.1);ctx.lineTo(px+sz*.9,py-sz*.04);ctx.lineTo(px+sz*.83,py+sz*.1);ctx.closePath();ctx.fill();
-  const er=Math.max(2,sz*.09);
-  ctx.fillStyle='#111';ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=br.ey;ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(px+sz*.32,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.arc(px+sz*.72,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#fda4af';ctx.beginPath();ctx.moveTo(px+half,py+sz*.64);ctx.lineTo(px+sz*.46,py+sz*.59);ctx.lineTo(px+sz*.54,py+sz*.59);ctx.closePath();ctx.fill();
-  ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.stroke();
-  ctx.restore();
 }
 
-function drawBoard(){
-  const S=CELL*GRID;
-  bx.fillStyle='#150b2e';bx.fillRect(0,0,S,S);
-  bx.strokeStyle='rgba(255,255,255,.035)';bx.lineWidth=1;
-  for(let i=0;i<=GRID;i++){bx.beginPath();bx.moveTo(i*CELL,0);bx.lineTo(i*CELL,S);bx.stroke();bx.beginPath();bx.moveTo(0,i*CELL);bx.lineTo(S,i*CELL);bx.stroke();}
-  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(board[r][c]!==null)cat(bx,c*CELL+1,r*CELL+1,board[r][c],CELL-2);
-  if(prev&&drag){
-    prev.cells.forEach(([pr,pc])=>{
-      if(pr>=0&&pr<GRID&&pc>=0&&pc<GRID){
-        bx.fillStyle=prev.valid?'rgba(255,255,255,.22)':'rgba(255,60,60,.18)';
-        bx.beginPath();bx.roundRect(pc*CELL+1,pr*CELL+1,CELL-2,CELL-2,CELL*.1);bx.fill();
-      }
+/* ================================================================
+   SCREEN: BOOT
+================================================================ */
+function renderBoot(app){
+  app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px">'
+    +'<div class="logo-font" style="font-size:22px;font-weight:900;color:#a78bfa">GAME CENTER</div>'
+    +'<div class="spinner"></div>'
+    +'</div>';
+  setTimeout(function(){
+    S.customGames=gsGet('gc:custom-games')||[];
+    var email=localStorage.getItem('gc:me');
+    var users=gsGet('gc:users')||[];
+    if(email){
+      var u=users.find(function(x){return x.email===email;});
+      if(u){ S.user=u; loadScores(); go('hub'); return; }
+    }
+    go('login');
+  },300);
+}
+
+/* ================================================================
+   SCREEN: LOGIN  (step: email | password | create)
+================================================================ */
+var LS={step:'email',email:'',err:''};
+
+function renderLogin(app){
+  var rings='<div style="position:fixed;inset:0;overflow:hidden;pointer-events:none">'
+    +[0,1,2,3,4].map(function(i){
+      return '<div style="position:absolute;border-radius:50%;width:'+(280+i*80)+'px;height:'+(280+i*80)+'px;'
+        +'border:1px solid rgba(109,40,217,'+(.04+i*.01)+');top:50%;left:50%;transform:translate(-50%,-50%)"></div>';
+    }).join('')+'</div>';
+
+  var inner='';
+  if(LS.step==='email'){
+    inner='<p style="margin:0 0 12px;color:rgba(255,255,255,.45);font-size:13px">Enter your Gmail address to continue</p>'
+      +'<input class="inp" id="li-email" type="email" placeholder="you@gmail.com" autocomplete="email" style="margin-bottom:12px" value="'+esc(LS.email)+'">'
+      +(LS.err?'<p class="err-msg">'+esc(LS.err)+'</p>':'')
+      +'<button class="btn btn-purple btn-full" id="li-next" style="padding:14px;font-size:15px">CONTINUE &#8594;</button>';
+  } else if(LS.step==='password'){
+    inner='<button id="li-back" style="background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:13px;padding:0;margin-bottom:14px;font-family:Syne,sans-serif">&#8592; '+esc(LS.email)+'</button>'
+      +'<p style="margin:0 0 12px;color:rgba(255,255,255,.45);font-size:13px">Enter your password</p>'
+      +'<input class="inp" id="li-pwd" type="password" placeholder="Password" autocomplete="current-password" style="margin-bottom:12px">'
+      +(LS.err?'<p class="err-msg">'+esc(LS.err)+'</p>':'')
+      +'<button class="btn btn-purple btn-full" id="li-signin" style="padding:14px;font-size:15px">SIGN IN &#8594;</button>';
+  } else {
+    var isFounder=(LS.email===FOUNDER_EMAIL);
+    inner='<button id="li-back" style="background:none;border:none;color:rgba(255,255,255,.4);cursor:pointer;font-size:13px;padding:0;margin-bottom:14px;font-family:Syne,sans-serif">&#8592; '+esc(LS.email)+'</button>'
+      +'<p style="margin:0 0 4px;font-size:15px;font-weight:600">Welcome! &#127881;</p>'
+      +'<p style="margin:0 0 14px;color:rgba(255,255,255,.4);font-size:13px">'+(isFounder?"You're the founding member. Create your password.":"You've been invited! Create your password.")+'</p>'
+      +'<input class="inp" id="li-pwd" type="password" placeholder="Create password (min 6 chars)" autocomplete="new-password" style="margin-bottom:10px">'
+      +'<input class="inp" id="li-pwd2" type="password" placeholder="Confirm password" autocomplete="new-password" style="margin-bottom:12px">'
+      +(LS.err?'<p class="err-msg">'+esc(LS.err)+'</p>':'')
+      +'<button class="btn btn-purple btn-full" id="li-create" style="padding:14px;font-size:15px">CREATE &amp; ENTER &#8594;</button>';
+  }
+
+  app.innerHTML='<div class="screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at center,#0d0d2a 0%,#07070f 70%)">'
+    +rings
+    +'<div style="max-width:380px;width:100%;text-align:center;position:relative;z-index:1">'
+      +'<div style="font-size:52px;margin-bottom:10px">&#127918;</div>'
+      +'<h1 class="logo-font" style="font-size:24px;font-weight:900;margin:0 0 4px;background:linear-gradient(135deg,#a78bfa,#f472b6,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-size:200%;animation:shimmer 4s linear infinite">GAME CENTER</h1>'
+      +'<p style="color:rgba(255,255,255,.3);margin:0 0 28px;font-size:12px;letter-spacing:.06em">INVITE ONLY &middot; COMPETE &middot; WIN</p>'
+      +'<div class="card" style="text-align:left">'+inner+'</div>'
+    +'</div>'
+  +'</div>';
+
+  /* bind events */
+  var ei=document.getElementById('li-email');
+  if(ei){ ei.focus(); ei.addEventListener('keydown',function(e){if(e.key==='Enter')doEmailNext();}); }
+  var backBtn=document.getElementById('li-back');
+  if(backBtn) backBtn.addEventListener('click',function(){ LS.step='email'; LS.err=''; renderLogin(document.getElementById('app')); });
+  var nextBtn=document.getElementById('li-next');
+  if(nextBtn) nextBtn.addEventListener('click',doEmailNext);
+  var signinBtn=document.getElementById('li-signin');
+  if(signinBtn){
+    signinBtn.addEventListener('click',doSignIn);
+    var pi=document.getElementById('li-pwd');
+    if(pi) pi.addEventListener('keydown',function(e){if(e.key==='Enter')doSignIn();});
+  }
+  var createBtn=document.getElementById('li-create');
+  if(createBtn){
+    createBtn.addEventListener('click',doCreate);
+    var p2i=document.getElementById('li-pwd2');
+    if(p2i) p2i.addEventListener('keydown',function(e){if(e.key==='Enter')doCreate();});
+  }
+}
+
+function doEmailNext(){
+  var el=document.getElementById('li-email');
+  var e=(el?el.value:LS.email).trim().toLowerCase();
+  LS.email=e;
+  if(!e.includes('@gmail.com')){ LS.err='Please enter a valid Gmail address.'; renderLogin(document.getElementById('app')); return; }
+  var users=gsGet('gc:users')||[];
+  var invites=gsGet('gc:invites')||[];
+  if(users.find(function(u){return u.email===e;})){ LS.step='password'; LS.err=''; }
+  else if(e===FOUNDER_EMAIL&&users.length===0){ LS.step='create'; LS.err=''; }
+  else if(invites.find(function(i){return i.email===e&&i.status==='pending';})){ LS.step='create'; LS.err=''; }
+  else{ LS.err='Access denied. This Game Center is invite-only.'; }
+  renderLogin(document.getElementById('app'));
+}
+
+function doSignIn(){
+  var pwdEl=document.getElementById('li-pwd');
+  if(!pwdEl) return;
+  var pwd=pwdEl.value;
+  var users=gsGet('gc:users')||[];
+  var u=users.find(function(x){return x.email===LS.email;});
+  if(!u){ LS.err='User not found.'; renderLogin(document.getElementById('app')); return; }
+  hashPwd(pwd).then(function(hash){
+    if(hash!==u.passwordHash){ LS.err='Incorrect password.'; renderLogin(document.getElementById('app')); return; }
+    localStorage.setItem('gc:me',u.email);
+    S.user=u; S.customGames=gsGet('gc:custom-games')||[]; loadScores();
+    LS={step:'email',email:'',err:''};
+    go('hub');
+  });
+}
+
+function doCreate(){
+  var pwdEl=document.getElementById('li-pwd'), pwd2El=document.getElementById('li-pwd2');
+  if(!pwdEl||!pwd2El) return;
+  var pwd=pwdEl.value, pwd2=pwd2El.value;
+  if(pwd.length<6){ LS.err='Password must be at least 6 characters.'; renderLogin(document.getElementById('app')); return; }
+  if(pwd!==pwd2){ LS.err='Passwords do not match.'; renderLogin(document.getElementById('app')); return; }
+  var e=LS.email;
+  var users=gsGet('gc:users')||[];
+  var invites=gsGet('gc:invites')||[];
+  var isFounder=(e===FOUNDER_EMAIL&&users.length===0);
+  hashPwd(pwd).then(function(hash){
+    var u={email:e,displayName:e.split('@')[0],passwordHash:hash,isAdmin:isFounder,joinedAt:Date.now(),
+           invitedBy:isFounder?null:((invites.find(function(i){return i.email===e;})||{}).by||null)};
+    var newInvites=invites.map(function(i){return i.email===e?Object.assign({},i,{status:'accepted'}):i;});
+    gsSet('gc:users',users.concat([u]));
+    gsSet('gc:invites',newInvites);
+    localStorage.setItem('gc:me',e);
+    S.user=u; S.customGames=gsGet('gc:custom-games')||[]; loadScores();
+    LS={step:'email',email:'',err:''};
+    go('hub');
+  });
+}
+
+/* ================================================================
+   SCREEN: HUB
+================================================================ */
+function renderHub(app){
+  var games=allGames();
+
+  var cards=games.map(function(g){
+    var top=(S.scores[g.id]||[])[0];
+    var topHtml=top
+      ?'<div style="text-align:right;flex-shrink:0;max-width:96px">'
+          +'<div style="font-size:9px;color:rgba(255,255,255,.3);font-family:Orbitron,monospace;margin-bottom:2px">&#127942; BEST</div>'
+          +'<div class="logo-font" style="font-size:20px;font-weight:700;color:#fbbf24">'+top.score+'</div>'
+          +'<div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(top.displayName)+'</div>'
+        +'</div>'
+      :'<div style="font-size:10px;color:rgba(255,255,255,.2)">No scores yet</div>';
+    return '<div class="card" style="overflow:hidden;position:relative;border-color:rgba(255,255,255,.07);margin-bottom:13px">'
+      +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+g.bg+'"></div>'
+      +'<div style="position:absolute;right:14px;top:12px;font-size:48px;opacity:.07;filter:blur(1px)">'+g.emoji+'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:13px">'
+        +'<div>'
+          +'<div style="font-size:26px;margin-bottom:5px">'+g.emoji+'</div>'
+          +'<h3 class="logo-font" style="margin:0 0 3px;font-size:14px;font-weight:700">'+esc(g.name)+'</h3>'
+          +'<p style="margin:0;font-size:11px;color:rgba(255,255,255,.35)">'+esc(g.description)+'</p>'
+        +'</div>'
+        +topHtml
+      +'</div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<button class="btn btn-full play-btn" data-id="'+g.id+'" style="background:'+g.bg+';padding:11px;font-size:13px;flex:1">&#9654; PLAY</button>'
+        +'<button class="btn btn-ghost board-btn" data-id="'+g.id+'" style="padding:11px 15px;font-size:17px;flex-shrink:0">&#128202;</button>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+
+  var hofRows=games.map(function(g){
+    var top=(S.scores[g.id]||[])[0];
+    if(!top) return '';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)">'
+      +'<span style="font-size:14px">'+g.emoji+'</span>'
+      +'<span style="font-size:12px;color:rgba(255,255,255,.45);flex:1">'+esc(g.name)+'</span>'
+      +'<span style="font-size:11px;color:rgba(255,255,255,.4)">'+esc(top.displayName)+'</span>'
+      +'<span class="logo-font" style="font-size:13px;font-weight:700;color:#fbbf24;margin-left:6px">'+top.score+'</span>'
+    +'</div>';
+  }).join('');
+  var hofEmpty=games.every(function(g){return !(S.scores[g.id]||[]).length;});
+
+  app.innerHTML='<div class="screen" style="min-height:100vh;background:#07070f;padding-bottom:40px">'
+    +'<div style="background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'
+      +'<div>'
+        +'<div class="logo-font" style="font-size:15px;font-weight:700;color:#a78bfa;letter-spacing:.08em">GAME CENTER</div>'
+        +'<div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:1px">&#128075; <span style="color:#f0f0ff;font-weight:600">'+esc(S.user.displayName)+'</span>'
+          +(S.user.isAdmin?'<span class="tag" style="background:rgba(167,139,250,.15);color:#a78bfa;margin-left:6px">ADMIN</span>':'')
+        +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:7px">'
+        +'<button class="btn btn-ghost" id="hub-invite" style="padding:8px 12px;font-size:12px">&#128101; Invite</button>'
+        +'<button class="btn btn-ghost" id="hub-upload" style="padding:8px 12px;font-size:12px">&#8679; Games</button>'
+        +'<button class="btn btn-ghost" id="hub-logout" style="padding:8px 10px;font-size:15px">&#9167;</button>'
+      +'</div>'
+    +'</div>'
+    +'<div style="padding:18px 18px 0">'
+      +'<div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:13px;font-family:Orbitron,monospace">ARCADE</div>'
+      +cards
+      +'<div style="margin-top:22px">'
+        +'<div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:11px;font-family:Orbitron,monospace">HALL OF FAME</div>'
+        +'<div class="card" style="padding:12px 16px">'
+          +(hofEmpty?'<p style="margin:0;color:rgba(255,255,255,.2);font-size:13px;text-align:center;padding:6px 0">No records yet &#8212; play to be first! &#128640;</p>':hofRows)
+        +'</div>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+
+  document.getElementById('hub-invite').addEventListener('click',function(){ go('invite'); });
+  document.getElementById('hub-upload').addEventListener('click',function(){ go('upload'); });
+  document.getElementById('hub-logout').addEventListener('click',function(){ localStorage.removeItem('gc:me'); S.user=null; go('login'); });
+  document.querySelectorAll('.play-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var g=allGames().find(function(x){return x.id===btn.dataset.id;});
+      if(g) launchGame(g);
     });
-  }
-  if(drag){
-    drag.c.forEach(([dr,dc])=>{
-      const px=dragX+dc*CELL-drag.w*CELL/2;
-      const py=dragY+dr*CELL-drag.h*CELL*1.1;
-      cat(bx,px,py,drag.b,CELL-2);
+  });
+  document.querySelectorAll('.board-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){ go('board',{boardGameId:btn.dataset.id}); });
+  });
+}
+
+/* ================================================================
+   SCREEN: LEADERBOARD
+================================================================ */
+function renderBoard(app){
+  var games=allGames();
+  var activeId=S.boardGameId||(games[0]&&games[0].id);
+  var activeGame=games.find(function(g){return g.id===activeId;})||games[0];
+  if(!activeGame){ go('hub'); return; }
+  var activeScores=S.scores[activeGame.id]||[];
+  var medals=['&#127945;','&#127946;','&#127947;','4&#65039;&#20anih;','5&#65039;&#20anih;'];
+  var medalText=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49','4\uFE0F\u20E3','5\uFE0F\u20E3'];
+
+  var tabs=games.map(function(g){
+    var active=g.id===activeGame.id;
+    return '<button class="btn board-tab" data-id="'+g.id+'" style="background:transparent;border-radius:0;padding:11px 16px;font-size:12px;'
+      +'color:'+(active?'#fff':'rgba(255,255,255,.3)')+';'
+      +'border-bottom:2px solid '+(active?(activeGame.accent||'#a78bfa'):'transparent')+';white-space:nowrap">'+g.emoji+' '+esc(g.name)+'</button>';
+  }).join('');
+
+  var rows=activeScores.length===0
+    ?'<div class="card" style="text-align:center;color:rgba(255,255,255,.2);padding:28px;font-size:13px">No scores yet &#8212; be first! &#128640;</div>'
+    :activeScores.map(function(s,i){
+      return '<div class="card" style="display:flex;align-items:center;gap:13px;padding:13px 15px;margin-bottom:9px;'
+        +'background:'+(i===0?'rgba(251,191,36,.07)':'rgba(255,255,255,.04)')+';'
+        +'border:1px solid '+(i===0?'rgba(251,191,36,.3)':'rgba(255,255,255,.07)')+';">'
+        +'<span style="font-size:22px;min-width:30px">'+medalText[i]+'</span>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.displayName)+'</div>'
+          +'<div style="font-size:10px;color:rgba(255,255,255,.3)">'+esc(s.email)+'</div>'
+        +'</div>'
+        +'<div class="logo-font" style="font-size:20px;font-weight:700;color:#fbbf24">'+s.score+'</div>'
+      +'</div>';
+    }).join('');
+
+  app.innerHTML='<div class="screen" style="min-height:100vh;background:#07070f;padding-bottom:40px">'
+    +'<div style="background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 18px;display:flex;align-items:center;gap:12px">'
+      +'<button class="btn btn-ghost" id="board-back" style="padding:7px 12px;font-size:13px">&#8592; Back</button>'
+      +'<div class="logo-font" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.5)">LEADERBOARD</div>'
+    +'</div>'
+    +'<div style="display:flex;border-bottom:1px solid rgba(255,255,255,.07);overflow-x:auto">'+tabs+'</div>'
+    +'<div style="padding:18px">'
+      +'<div style="text-align:center;padding:20px 0 18px">'
+        +'<div style="font-size:48px;margin-bottom:8px">'+activeGame.emoji+'</div>'
+        +'<h2 class="logo-font" style="margin:0 0 3px;font-size:16px;font-weight:700;color:'+(activeGame.accent||'#a78bfa')+'">'+esc(activeGame.name)+'</h2>'
+        +'<p style="margin:0 0 18px;font-size:11px;color:rgba(255,255,255,.3)">'+esc(activeGame.description)+'</p>'
+        +'<button class="btn play-btn-board" data-id="'+activeGame.id+'" style="background:'+activeGame.bg+';padding:10px 22px;font-size:12px">&#9654; PLAY NOW</button>'
+      +'</div>'
+      +rows
+    +'</div>'
+  +'</div>';
+
+  document.getElementById('board-back').addEventListener('click',function(){ go('hub'); });
+  document.querySelectorAll('.board-tab').forEach(function(btn){
+    btn.addEventListener('click',function(){ go('board',{boardGameId:btn.dataset.id}); });
+  });
+  document.querySelectorAll('.play-btn-board').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var g=allGames().find(function(x){return x.id===btn.dataset.id;});
+      if(g) launchGame(g);
     });
+  });
+}
+
+/* ================================================================
+   SCREEN: INVITE
+================================================================ */
+function renderInvite(app){
+  var invites=gsGet('gc:invites')||[];
+  var mine=invites.filter(function(i){return i.by===S.user.email;});
+  var invRows=mine.length===0?''
+    :'<div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:11px;font-family:Orbitron,monospace">YOUR INVITES</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +mine.map(function(inv){
+      return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px">'
+        +'<span style="font-size:13px;color:rgba(255,255,255,.65)">'+esc(inv.email)+'</span>'
+        +'<span class="tag" style="background:'+(inv.status==='accepted'?'rgba(74,222,128,.12)':'rgba(255,255,255,.06)')+';'
+          +'color:'+(inv.status==='accepted'?'#4ade80':'rgba(255,255,255,.4)')+'">'+inv.status.toUpperCase()+'</span>'
+      +'</div>';
+    }).join('')+'</div>';
+
+  app.innerHTML='<div class="screen" style="min-height:100vh;background:#07070f;padding-bottom:40px">'
+    +'<div style="background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 18px;display:flex;align-items:center;gap:12px">'
+      +'<button class="btn btn-ghost" id="inv-back" style="padding:7px 12px;font-size:13px">&#8592; Back</button>'
+      +'<div class="logo-font" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.5)">INVITE FRIENDS</div>'
+    +'</div>'
+    +'<div style="padding:18px">'
+      +'<p style="color:rgba(255,255,255,.35);font-size:13px;margin-bottom:18px;line-height:1.6">Game Center is invite-only. Enter your friend\'s Gmail. They open this page and type their email to set a password.</p>'
+      +'<div class="card" style="margin-bottom:18px">'
+        +'<label style="display:block;font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.12em;margin-bottom:10px;font-family:Orbitron,monospace">GMAIL ADDRESS</label>'
+        +'<input class="inp" id="inv-email" type="email" placeholder="friend@gmail.com" style="margin-bottom:12px">'
+        +'<div id="inv-msg"></div>'
+        +'<button class="btn btn-purple btn-full" id="inv-send" style="padding:12px;font-size:14px">SEND INVITE &#8594;</button>'
+      +'</div>'
+      +invRows
+    +'</div>'
+  +'</div>';
+
+  document.getElementById('inv-back').addEventListener('click',function(){ go('hub'); });
+  document.getElementById('inv-send').addEventListener('click',doSendInvite);
+  document.getElementById('inv-email').addEventListener('keydown',function(e){if(e.key==='Enter')doSendInvite();});
+}
+
+function doSendInvite(){
+  var input=document.getElementById('inv-email');
+  var msgEl=document.getElementById('inv-msg');
+  if(!input||!msgEl) return;
+  var e=input.value.trim().toLowerCase();
+  if(!e.endsWith('@gmail.com')){ msgEl.innerHTML='<p class="err-msg">Only Gmail addresses are supported.</p>'; return; }
+  var users=gsGet('gc:users')||[];
+  var invites=gsGet('gc:invites')||[];
+  if(users.find(function(u){return u.email===e;})){ msgEl.innerHTML='<p class="err-msg">Already a member!</p>'; return; }
+  if(invites.find(function(i){return i.email===e&&i.status==='pending';})){ msgEl.innerHTML='<p class="err-msg">Already invited!</p>'; return; }
+  gsSet('gc:invites',invites.concat([{email:e,by:S.user.email,byName:S.user.displayName,at:Date.now(),status:'pending'}]));
+  input.value='';
+  msgEl.innerHTML='<p class="ok-msg">&#10003; Invite sent to '+esc(e)+'!</p>';
+  setTimeout(function(){ go('invite'); },800);
+}
+
+/* ================================================================
+   SCREEN: UPLOAD / MANAGE GAMES
+================================================================ */
+function renderUpload(app){
+  var custom=S.customGames;
+  var customList=custom.length===0?''
+    :'<div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:11px;font-family:Orbitron,monospace">UPLOADED GAMES</div>'
+    +'<div style="display:flex;flex-direction:column;gap:9px">'
+    +custom.map(function(g){
+      return '<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 15px">'
+        +'<span style="font-size:22px">'+g.emoji+'</span>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-weight:600;font-size:14px">'+esc(g.name)+'</div>'
+          +'<div style="font-size:11px;color:rgba(255,255,255,.3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.description)+'</div>'
+        +'</div>'
+        +'<button class="btn btn-red del-btn" data-id="'+g.id+'" style="padding:7px 11px;font-size:13px;flex-shrink:0">&#128465;</button>'
+      +'</div>';
+    }).join('')+'</div>';
+
+  app.innerHTML='<div class="screen" style="min-height:100vh;background:#07070f;padding-bottom:40px">'
+    +'<div style="background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.07);padding:14px 18px;display:flex;align-items:center;gap:12px">'
+      +'<button class="btn btn-ghost" id="upl-back" style="padding:7px 12px;font-size:13px">&#8592; Back</button>'
+      +'<div class="logo-font" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.5)">MANAGE GAMES</div>'
+    +'</div>'
+    +'<div style="padding:18px">'
+      +'<p style="color:rgba(255,255,255,.35);font-size:13px;margin-bottom:18px;line-height:1.6">Upload a compatible HTML game file. Games must call <code style="background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:11px">window.parent.postMessage</code> with the final score.</p>'
+      +'<div id="upl-drop" style="border:2px dashed rgba(255,255,255,.15);border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;margin-bottom:18px;transition:border-color .2s,background .2s">'
+        +'<div style="font-size:36px;margin-bottom:10px">&#128193;</div>'
+        +'<div style="font-weight:600;font-size:15px;margin-bottom:4px">Drag &amp; drop your game here</div>'
+        +'<div style="color:rgba(255,255,255,.35);font-size:13px">or click to browse &mdash; .html files only</div>'
+        +'<input id="upl-file" type="file" accept=".html" style="display:none">'
+      +'</div>'
+      +'<div id="upl-status"></div>'
+      +customList
+      +'<div class="card" style="margin-top:20px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.15)">'
+        +'<div style="font-size:11px;color:#a78bfa;font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128161; HOW TO CREATE A GAME</div>'
+        +'<p style="font-size:12px;color:rgba(255,255,255,.45);line-height:1.7;margin:0">'
+          +'Ask any AI to build a game. Include these requirements:<br><br>'
+          +'1. Single standalone HTML file<br>'
+          +'2. Mobile-first, touch-enabled<br>'
+          +'3. Meta tags: <code style="font-size:10px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px">game-name</code>, <code style="font-size:10px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px">game-emoji</code>, <code style="font-size:10px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px">game-description</code><br>'
+          +'4. On game end: <code style="font-size:10px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px">window.parent.postMessage({type:"GAME_OVER",score:N},\'*\')</code><br><br>'
+          +'See <strong>GAME_README.md</strong> for full prompt templates.'
+        +'</p>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+
+  document.getElementById('upl-back').addEventListener('click',function(){ go('hub'); });
+  var drop=document.getElementById('upl-drop');
+  var fileInput=document.getElementById('upl-file');
+  drop.addEventListener('click',function(){ fileInput.click(); });
+  drop.addEventListener('dragover',function(e){ e.preventDefault(); drop.style.borderColor='#a78bfa'; drop.style.background='rgba(167,139,250,.06)'; });
+  drop.addEventListener('dragleave',function(){ drop.style.borderColor='rgba(255,255,255,.15)'; drop.style.background=''; });
+  drop.addEventListener('drop',function(e){ e.preventDefault(); drop.style.borderColor='rgba(255,255,255,.15)'; drop.style.background=''; if(e.dataTransfer.files[0]) processUpload(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change',function(){ if(fileInput.files[0]) processUpload(fileInput.files[0]); });
+  document.querySelectorAll('.del-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var id=btn.dataset.id;
+      var upd=(gsGet('gc:custom-games')||[]).filter(function(g){return g.id!==id;});
+      gsSet('gc:custom-games',upd); S.customGames=upd; delete S.scores[id]; go('upload');
+    });
+  });
+}
+
+function processUpload(file){
+  var statusEl=document.getElementById('upl-status');
+  if(!statusEl) return;
+  if(!file.name.endsWith('.html')){
+    statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#f87171;font-size:13px">&#10060; Only .html files are supported.</div>';
+    return;
   }
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var html=ev.target.result;
+    var parser=new DOMParser();
+    var doc=parser.parseFromString(html,'text/html');
+    var name=(doc.querySelector('meta[name="game-name"]')||{}).content||file.name.replace('.html','');
+    var emoji=(doc.querySelector('meta[name="game-emoji"]')||{}).content||'\uD83C\uDFAE';
+    var description=(doc.querySelector('meta[name="game-description"]')||{}).content||'A custom game';
+    var id='custom-'+name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,30)+'-'+Date.now().toString(36);
+    var gameData={id:id,name:name,emoji:emoji,description:description,html:html,bg:'linear-gradient(135deg,#0f766e,#0d9488)',accent:'#2dd4bf',builtin:false};
+    var existing=gsGet('gc:custom-games')||[];
+    var updated=existing.filter(function(g){return g.id!==id;}).concat([gameData]);
+    gsSet('gc:custom-games',updated); S.customGames=updated; S.scores[id]=[];
+    if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added to the arcade!</div>';
+    setTimeout(function(){ go('upload'); },900);
+  };
+  reader.readAsText(file);
 }
 
-function drawTray(){
-  const W=CELL*GRID,H=tc.height;
-  tx.clearRect(0,0,W,H);
-  const sw=Math.floor(W/3);
-  for(let i=0;i<3;i++){
-    if(!pieces[i]||i===dragIdx)continue;
-    const p=pieces[i];
-    const mr=Math.max(...p.c.map(([r])=>r))+1;
-    const mc=Math.max(...p.c.map(([,c])=>c))+1;
-    const sc=Math.min((sw-14)/(mc*CELL),(H-14)/(mr*CELL),1);
-    const sz=Math.floor((CELL-1)*sc);
-    const ox=Math.floor(sw*i+(sw-mc*sz*1.04)/2);
-    const oy=Math.floor((H-mr*sz*1.04)/2)+4;
-    p.c.forEach(([r,c])=>cat(tx,ox+c*Math.floor(sz*1.04),oy+r*Math.floor(sz*1.04),p.b,sz));
-  }
+/* ================================================================
+   GAME OVERLAY
+================================================================ */
+var _currentGame=null, _currentBlobUrl=null;
+
+function launchGame(game){
+  _currentGame=game;
+  var html=game.builtin?CAT_BLAST_HTML:game.html;
+  if(_currentBlobUrl) URL.revokeObjectURL(_currentBlobUrl);
+  var blob=new Blob([html],{type:'text/html'});
+  _currentBlobUrl=URL.createObjectURL(blob);
+  document.getElementById('game-iframe').src=_currentBlobUrl;
+  document.getElementById('game-title-bar').textContent=game.emoji+'  '+game.name.toUpperCase();
+  document.getElementById('game-overlay').classList.add('active');
 }
 
-function rp(){const s=SH[Math.floor(Math.random()*SH.length)];const rs=s.c.map(([r])=>r);const cs=s.c.map(([,c])=>c);return{...s,h:Math.max(...rs)+1,w:Math.max(...cs)+1};}
-function refill(){for(let i=0;i<3;i++)pieces[i]=rp();}
-function canPlace(p,row,col){return p.c.every(([r,c])=>{const nr=row+r,nc=col+c;return nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&board[nr][nc]===null;});}
-
-function place(p,row,col){
-  p.c.forEach(([r,c])=>{board[row+r][col+c]=p.b;});
-  score+=p.c.length*10;
-  const rc=[],cc=[];
-  for(let r=0;r<GRID;r++)if(board[r].every(v=>v!==null))rc.push(r);
-  for(let c=0;c<GRID;c++)if(board.every(row=>row[c]!==null))cc.push(c);
-  const lines=rc.length+cc.length;
-  if(lines>0){
-    rc.forEach(r=>{for(let c=0;c<GRID;c++)board[r][c]=null;});
-    cc.forEach(c=>{for(let r=0;r<GRID;r++)board[r][c]=null;});
-    const bonus=[0,100,250,450,700,1000,1400,1900,2500,3200][Math.min(lines,9)];
-    score+=bonus;
-  }
-  sel.textContent=score;
-  if(score>best){best=score;localStorage.setItem('cb:best',best);bel.textContent=best;}
-}
-
-function checkOver(){return pieces.every((p,i)=>{if(!p||i===dragIdx)return true;for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(canPlace(p,r,c))return false;return true;});}
-
-function gameOver(){
-  document.getElementById('fs').textContent=score;
-  document.getElementById('go').classList.add('show');
-  try{window.parent.postMessage({type:'GAME_OVER',score},'*');}catch(e){}
-}
-
-function restart(){
-  board=Array.from({length:GRID},()=>Array(GRID).fill(null));
-  score=0;sel.textContent=0;
-  pieces=[null,null,null];refill();
-  drag=null;dragIdx=-1;prev=null;
-  document.getElementById('go').classList.remove('show');
-  drawBoard();drawTray();
-}
-
-function cp(canvas,e){const rect=canvas.getBoundingClientRect();const sx=canvas.width/rect.width,sy=canvas.height/rect.height;const cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-rect.left)*sx,y:(cy-rect.top)*sy};}
-
-function getTrayIdx(x){const sw=Math.floor(CELL*GRID/3);const i=Math.floor(x/sw);return(i>=0&&i<3&&pieces[i])?i:-1;}
-
-function calcPrev(p,bx2,by2){const col=Math.floor(bx2/CELL)-Math.floor(p.w/2);const row=Math.floor(by2/CELL)-Math.floor(p.h/2);const cells=p.c.map(([r,c])=>[row+r,col+c]);return{valid:canPlace(p,row,col),cells,row,col};}
-
-tc.addEventListener('mousedown',e=>{const pt=cp(tc,e);const idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];const brect=bc.getBoundingClientRect();const trect=tc.getBoundingClientRect();const sx=bc.width/brect.width;dragX=(e.clientX-brect.left)*sx;dragY=bc.height+(e.clientY-trect.top)*(bc.height/brect.height);drawBoard();drawTray();});
-tc.addEventListener('touchstart',e=>{e.preventDefault();const pt=cp(tc,e);const idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];const brect=bc.getBoundingClientRect();const sx=bc.width/brect.width;const sy=bc.height/brect.height;dragX=(e.touches[0].clientX-brect.left)*sx;dragY=(e.touches[0].clientY-brect.top)*sy+CELL*.5;drawBoard();drawTray();},{passive:false});
-
-document.addEventListener('mousemove',e=>{if(!drag)return;const brect=bc.getBoundingClientRect();const sx=bc.width/brect.width,sy=bc.height/brect.height;dragX=(e.clientX-brect.left)*sx;dragY=(e.clientY-brect.top)*sy;const bx2=dragX,by2=dragY+CELL;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();});
-document.addEventListener('touchmove',e=>{if(!drag)return;e.preventDefault();const brect=bc.getBoundingClientRect();const sx=bc.width/brect.width,sy=bc.height/brect.height;dragX=(e.touches[0].clientX-brect.left)*sx;dragY=(e.touches[0].clientY-brect.top)*sy;const bx2=dragX,by2=dragY+CELL*.6;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();},{passive:false});
-
-function endDrag(){if(!drag)return;if(prev&&prev.valid){place(drag,prev.row,prev.col);pieces[dragIdx]=null;if(pieces.every(p=>!p))refill();if(checkOver())setTimeout(gameOver,400);}drag=null;dragIdx=-1;prev=null;drawBoard();drawTray();}
-document.addEventListener('mouseup',endDrag);
-document.addEventListener('touchend',endDrag);
-window.addEventListener('resize',()=>{resize();drawBoard();drawTray();});
-resize();restart();
-<\/script>
-</body>
-</html>`;
-
-// ═══════════════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════════════
-const FOUNDER_EMAIL = 'ahathaway21@gmail.com';
-
-const BUILT_IN_GAMES = [
-  { id:'cat-blast', name:'Cat Blast', emoji:'🐱',
-    description:'Block Blast with 7 cat breeds! Fill rows and columns to clear them.',
-    bg:'linear-gradient(135deg,#7c3aed,#be185d)', accent:'#f472b6', builtin:true }
-];
-
-// ═══════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════
-async function hashPwd(pwd) {
-  const data = new TextEncoder().encode(pwd + ':gc-salt-2025');
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-const gs = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
-const ss = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-
-// ═══════════════════════════════════════════════════════
-// GAME OVERLAY MANAGER
-// ═══════════════════════════════════════════════════════
-let _currentGame = null;
-let _currentBlobUrl = null;
-let _onScoreCallback = null;
-
-function launchGameOverlay(game, onScore) {
-  _currentGame = game;
-  _onScoreCallback = onScore;
-  const html = game.builtin ? CAT_BLAST_HTML : game.html;
-  if (_currentBlobUrl) URL.revokeObjectURL(_currentBlobUrl);
-  const blob = new Blob([html], { type:'text/html' });
-  _currentBlobUrl = URL.createObjectURL(blob);
-  const iframe = document.getElementById('game-iframe');
-  const overlay = document.getElementById('game-overlay');
-  const titleBar = document.getElementById('game-title-bar');
-  iframe.src = _currentBlobUrl;
-  titleBar.textContent = `${game.emoji}  ${game.name.toUpperCase()}`;
-  overlay.classList.add('active');
-}
-
-function closeGameOverlay() {
+function closeGameOverlay(){
   document.getElementById('game-overlay').classList.remove('active');
-  document.getElementById('game-iframe').src = 'about:blank';
   document.getElementById('score-panel').classList.remove('active');
-  if (_currentBlobUrl) { URL.revokeObjectURL(_currentBlobUrl); _currentBlobUrl = null; }
-  _currentGame = null;
+  document.getElementById('game-iframe').src='about:blank';
+  if(_currentBlobUrl){ URL.revokeObjectURL(_currentBlobUrl); _currentBlobUrl=null; }
+  _currentGame=null;
+  loadScores(); render();
 }
 
-window.addEventListener('message', e => {
-  if (e.data?.type === 'GAME_OVER' && _currentGame && _onScoreCallback) {
-    const result = _onScoreCallback(_currentGame.id, e.data.score);
-    showScorePanel(_currentGame, e.data.score, result.top5, result.rank);
+document.getElementById('game-back-btn').addEventListener('click',closeGameOverlay);
+
+window.addEventListener('message',function(e){
+  if(e.data&&e.data.type==='GAME_OVER'&&_currentGame&&S.user){
+    var result=submitScore(_currentGame.id,e.data.score);
+    showScorePanel(_currentGame,e.data.score,result.top5,result.rank);
   }
 });
 
-function showScorePanel(game, pts, top5, rank) {
-  const panel = document.getElementById('score-panel');
-  document.getElementById('sp-emoji').textContent = pts >= 500 ? '🏆' : pts >= 200 ? '🎉' : '💪';
-  document.getElementById('sp-score').textContent = pts;
-  const rankLabels = ['🥇 #1 on the leaderboard!','🥈 #2 on the leaderboard!','🥉 #3 on the leaderboard!','4th place!','5th place!'];
-  const rl = document.getElementById('sp-rank');
-  rl.textContent = rank > 0 && rank <= 5 ? rankLabels[rank-1] : '';
-  rl.style.color = game.accent || '#a78bfa';
-  const lb = document.getElementById('sp-leaderboard');
-  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-  lb.innerHTML = top5.map((s,i) => `
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:8px;
-      background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:11px">
-      <span style="font-size:18px;min-width:26px">${medals[i]}</span>
-      <span style="flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Syne',sans-serif">${s.displayName}</span>
-      <span style="font-family:'Orbitron',monospace;font-weight:700;color:#fbbf24;font-size:15px">${s.score}</span>
-    </div>`).join('');
-  panel.classList.add('active');
-  document.getElementById('sp-back').onclick = () => { closeGameOverlay(); };
-  document.getElementById('sp-again').onclick = () => {
-    panel.classList.remove('active');
-    const iframe = document.getElementById('game-iframe');
-    iframe.src = _currentBlobUrl;
-  };
+function showScorePanel(game,pts,top5,rank){
+  var medalText=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49','4\uFE0F\u20E3','5\uFE0F\u20E3'];
+  var rankLabels=['\uD83E\uDD47 #1 on the leaderboard!','\uD83E\uDD48 #2 on the leaderboard!','\uD83E\uDD49 #3 on the leaderboard!','4th place!','5th place!'];
+  document.getElementById('sp-emoji').textContent=pts>=500?'\uD83C\uDFC6':pts>=200?'\uD83C\uDF89':'\uD83D\uDCAA';
+  document.getElementById('sp-score').textContent=pts;
+  var rl=document.getElementById('sp-rank');
+  rl.textContent=(rank>0&&rank<=5)?rankLabels[rank-1]:'';
+  rl.style.color=game.accent||'#a78bfa';
+  document.getElementById('sp-leaderboard').innerHTML=top5.map(function(s,i){
+    return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:11px">'
+      +'<span style="font-size:18px;min-width:26px">'+medalText[i]+'</span>'
+      +'<span style="flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.displayName)+'</span>'
+      +'<span style="font-family:Orbitron,monospace;font-weight:700;color:#fbbf24;font-size:15px">'+s.score+'</span>'
+    +'</div>';
+  }).join('');
+  document.getElementById('score-panel').classList.add('active');
+  document.getElementById('sp-back').onclick=function(){ closeGameOverlay(); };
+  document.getElementById('sp-again').onclick=function(){ document.getElementById('score-panel').classList.remove('active'); document.getElementById('game-iframe').src=_currentBlobUrl; };
 }
 
-document.getElementById('game-back-btn').onclick = () => closeGameOverlay();
+/* ================================================================
+   CAT BLAST  — stored as an array of strings, joined at launch
+   (avoids any template-literal or script-tag parsing issues)
+================================================================ */
+var CAT_BLAST_LINES=[
+'<!DOCTYPE html><html lang="en"><head>',
+'<meta charset="UTF-8">',
+'<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">',
+'<meta name="game-name" content="Cat Blast">',
+'<meta name="game-emoji" content="\uD83D\uDC31">',
+'<meta name="game-description" content="Block Blast with 7 cat breeds! Fill rows and columns to clear them.">',
+'<title>Cat Blast</title>',
+'<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">',
+'<style>',
+'*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}',
+'body{background:#0c0620;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden;font-family:"Fredoka One",cursive;padding:8px 0 0}',
+'#sbar{display:flex;gap:12px;margin-bottom:8px;padding:0 8px;width:100%;justify-content:center}',
+'.sbox{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:5px 22px;text-align:center}',
+'.slbl{font-size:9px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase}',
+'.sval{font-size:1.7rem;color:#FFD700;line-height:1.2}',
+'canvas{display:block;border-radius:10px}',
+'#go{position:fixed;inset:0;background:rgba(5,1,18,.88);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20}',
+'#go.show{display:flex}',
+'.got{font-size:2.2rem;color:#FFD700}',
+'.gos{font-size:3.2rem;color:#fff;line-height:1}',
+'.gob{background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:14px;padding:14px 36px;color:#fff;font-size:1.1rem;font-family:"Fredoka One",cursive;cursor:pointer;margin-top:4px}',
+'</style></head><body>',
+'<div id="sbar"><div class="sbox"><div class="slbl">SCORE</div><div class="sval" id="sel">0</div></div>',
+'<div class="sbox"><div class="slbl">BEST</div><div class="sval" id="bel">0</div></div></div>',
+'<canvas id="bc"></canvas><canvas id="tc" style="margin-top:10px"></canvas>',
+'<div id="go"><div class="got">GAME OVER \uD83D\uDC31</div><div class="gos" id="fs">0</div>',
+'<button class="gob" onclick="restart()">PLAY AGAIN</button></div>',
+'<script>',
+'var GRID=9,CELL=40;',
+'var score=0,best=+(localStorage.getItem("cb:best")||0);',
+'var board=[],pieces=[null,null,null];',
+'var drag=null,dragIdx=-1,dragX=0,dragY=0,prev=null;',
+'var sel=document.getElementById("sel"),bel=document.getElementById("bel");',
+'bel.textContent=best;',
+'var bc=document.getElementById("bc"),tc=document.getElementById("tc");',
+'var bx=bc.getContext("2d"),tx=tc.getContext("2d");',
+'function resize(){var mw=Math.min(window.innerWidth-16,420);CELL=Math.floor(mw/GRID);bc.width=bc.height=CELL*GRID;tc.width=CELL*GRID;tc.height=Math.ceil(CELL*3.2);}',
+'var B=[{n:"Orange Tabby",bg:"#F97316",dt:"#C2410C",ey:"#16A34A",t:"stripe"},{n:"Tuxedo",bg:"#1c1c24",dt:"#FFFFFF",ey:"#22C55E",t:"chest"},{n:"Calico",bg:"#FEF3C7",dt:"#F97316",ey:"#3B82F6",t:"patch"},{n:"Siamese",bg:"#FDE68A",dt:"#78350F",ey:"#60A5FA",t:"point"},{n:"Russian Blue",bg:"#6B7280",dt:"#9CA3AF",ey:"#4ADE80",t:"shim"},{n:"Flame Point",bg:"#F1F5F9",dt:"#F97316",ey:"#93C5FD",t:"flame"},{n:"Snow Bengal",bg:"#F8FAFC",dt:"#475569",ey:"#A78BFA",t:"spot"}];',
+'var SH=[{b:3,c:[[0,0]]},{b:3,c:[[0,0],[0,1],[0,2]]},{b:3,c:[[0,0],[1,0],[2,0]]},{b:3,c:[[0,0],[0,1],[0,2],[0,3]]},{b:3,c:[[0,0],[1,0],[2,0],[3,0]]},{b:0,c:[[0,0],[0,1],[1,1],[1,2]]},{b:0,c:[[0,1],[0,2],[1,0],[1,1]]},{b:0,c:[[0,0],[1,0],[1,1],[2,1]]},{b:0,c:[[0,1],[1,0],[1,1],[2,0]]},{b:1,c:[[0,0],[0,1],[1,0],[1,1]]},{b:1,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]},{b:1,c:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]]},{b:2,c:[[0,0],[1,0],[1,1]]},{b:2,c:[[0,0],[0,1],[1,0]]},{b:2,c:[[0,0],[1,0],[2,0],[2,1]]},{b:2,c:[[0,0],[0,1],[0,2],[1,0]]},{b:2,c:[[0,2],[1,2],[2,0],[2,1],[2,2]]},{b:2,c:[[0,0],[1,0],[2,0],[0,1],[0,2]]},{b:4,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]},{b:4,c:[[0,0],[0,1],[0,2],[0,3],[0,4]]},{b:4,c:[[0,0],[1,0],[2,0],[3,0],[4,0]]},{b:5,c:[[0,0],[0,1],[0,2],[1,1]]},{b:5,c:[[0,1],[1,0],[1,1],[2,1]]},{b:5,c:[[0,1],[1,0],[1,1],[1,2],[2,1]]},{b:6,c:[[0,0],[1,0],[2,0],[2,1],[2,2]]},{b:6,c:[[0,0],[0,1],[0,2],[1,2],[2,2]]},{b:6,c:[[0,0],[0,1],[1,0],[2,0],[2,1]]},{b:6,c:[[0,1],[1,1],[2,0],[2,1]]}];',
+'function cat(ctx,px,py,bi,sz){var br=B[bi],r=sz*.12,half=sz*.5;ctx.save();ctx.fillStyle=br.bg;ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.fill();if(br.t==="stripe"){ctx.strokeStyle=br.dt;ctx.lineWidth=Math.max(1,sz*.07);for(var i=0;i<3;i++){ctx.beginPath();ctx.moveTo(px+sz*.18,py+sz*(.22+i*.22));ctx.lineTo(px+sz*.82,py+sz*(.22+i*.22));ctx.stroke();}}else if(br.t==="chest"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+sz*.72,sz*.22,sz*.17,0,0,Math.PI*2);ctx.fill();}else if(br.t==="patch"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.roundRect(px+sz*.54,py+sz*.1,sz*.34,sz*.32,sz*.05);ctx.fill();ctx.fillStyle="#92400E";ctx.beginPath();ctx.roundRect(px+sz*.1,py+sz*.54,sz*.28,sz*.28,sz*.05);ctx.fill();}else if(br.t==="point"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.roundRect(px,py,sz*.38,sz*.38,r);ctx.fill();ctx.beginPath();ctx.roundRect(px+sz*.62,py,sz*.38,sz*.38,r);ctx.fill();ctx.beginPath();ctx.roundRect(px,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();ctx.beginPath();ctx.roundRect(px+sz*.62,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();}else if(br.t==="shim"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+half,sz*.3,sz*.36,Math.PI/4,0,Math.PI*2);ctx.fill();}else if(br.t==="flame"){ctx.fillStyle=br.dt;for(var j=0;j<3;j++){ctx.beginPath();ctx.moveTo(px+sz*(.18+j*.28),py);ctx.lineTo(px+sz*(.12+j*.28),py-sz*.12);ctx.lineTo(px+sz*(.34+j*.28),py);ctx.closePath();ctx.fill();}}else if(br.t==="spot"){ctx.fillStyle=br.dt;[[.24,.18],[.62,.13],[.7,.48],[.18,.58],[.52,.62]].forEach(function(p){ctx.beginPath();ctx.ellipse(px+sz*p[0],py+sz*p[1],sz*.07,sz*.05,Math.PI/5,0,Math.PI*2);ctx.fill();});}var ec=bi===1?"#1c1c24":br.dt;ctx.fillStyle=ec;ctx.beginPath();ctx.moveTo(px+sz*.15,py+sz*.1);ctx.lineTo(px+sz*.06,py-sz*.11);ctx.lineTo(px+sz*.33,py+sz*.1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(px+sz*.67,py+sz*.1);ctx.lineTo(px+sz*.94,py-sz*.11);ctx.lineTo(px+sz*.85,py+sz*.1);ctx.closePath();ctx.fill();ctx.fillStyle="rgba(253,164,175,.6)";ctx.beginPath();ctx.moveTo(px+sz*.17,py+sz*.1);ctx.lineTo(px+sz*.1,py-sz*.04);ctx.lineTo(px+sz*.29,py+sz*.1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(px+sz*.71,py+sz*.1);ctx.lineTo(px+sz*.9,py-sz*.04);ctx.lineTo(px+sz*.83,py+sz*.1);ctx.closePath();ctx.fill();var er=Math.max(2,sz*.09);ctx.fillStyle="#111";ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er,0,Math.PI*2);ctx.fill();ctx.fillStyle=br.ey;ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(px+sz*.32,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px+sz*.72,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fda4af";ctx.beginPath();ctx.moveTo(px+half,py+sz*.64);ctx.lineTo(px+sz*.46,py+sz*.59);ctx.lineTo(px+sz*.54,py+sz*.59);ctx.closePath();ctx.fill();ctx.strokeStyle="rgba(255,255,255,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.stroke();ctx.restore();}',
+'function drawBoard(){var S=CELL*GRID;bx.fillStyle="#150b2e";bx.fillRect(0,0,S,S);bx.strokeStyle="rgba(255,255,255,.035)";bx.lineWidth=1;for(var i=0;i<=GRID;i++){bx.beginPath();bx.moveTo(i*CELL,0);bx.lineTo(i*CELL,S);bx.stroke();bx.beginPath();bx.moveTo(0,i*CELL);bx.lineTo(S,i*CELL);bx.stroke();}for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(board[r][c]!==null)cat(bx,c*CELL+1,r*CELL+1,board[r][c],CELL-2);if(prev&&drag){prev.cells.forEach(function(p){var pr=p[0],pc=p[1];if(pr>=0&&pr<GRID&&pc>=0&&pc<GRID){bx.fillStyle=prev.valid?"rgba(255,255,255,.22)":"rgba(255,60,60,.18)";bx.beginPath();bx.roundRect(pc*CELL+1,pr*CELL+1,CELL-2,CELL-2,CELL*.1);bx.fill();}});}if(drag){drag.c.forEach(function(d){var dr=d[0],dc=d[1];var px2=dragX+dc*CELL-drag.w*CELL/2;var py2=dragY+dr*CELL-drag.h*CELL*1.1;cat(bx,px2,py2,drag.b,CELL-2);});}}',
+'function drawTray(){var W=CELL*GRID,H=tc.height;tx.clearRect(0,0,W,H);var sw=Math.floor(W/3);for(var i=0;i<3;i++){if(!pieces[i]||i===dragIdx)continue;var p=pieces[i];var mr=0,mc=0;p.c.forEach(function(x){if(x[0]>mr)mr=x[0];if(x[1]>mc)mc=x[1];});mr++;mc++;var sc=Math.min((sw-14)/(mc*CELL),(H-14)/(mr*CELL),1);var sz=Math.floor((CELL-1)*sc);var ox=Math.floor(sw*i+(sw-mc*sz*1.04)/2);var oy=Math.floor((H-mr*sz*1.04)/2)+4;p.c.forEach(function(x){cat(tx,ox+x[1]*Math.floor(sz*1.04),oy+x[0]*Math.floor(sz*1.04),p.b,sz);});}}',
+'function rp(){var s=SH[Math.floor(Math.random()*SH.length)];var mx=0,my=0;s.c.forEach(function(x){if(x[0]>mx)mx=x[0];if(x[1]>my)my=x[1];});return{b:s.b,c:s.c,h:mx+1,w:my+1};}',
+'function refill(){for(var i=0;i<3;i++)pieces[i]=rp();}',
+'function canPlace(p,row,col){return p.c.every(function(x){var nr=row+x[0],nc=col+x[1];return nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&board[nr][nc]===null;});}',
+'function place(p,row,col){p.c.forEach(function(x){board[row+x[0]][col+x[1]]=p.b;});score+=p.c.length*10;var rc=[],cc=[];for(var r=0;r<GRID;r++)if(board[r].every(function(v){return v!==null;}))rc.push(r);for(var c=0;c<GRID;c++){var full=true;for(var r2=0;r2<GRID;r2++)if(board[r2][c]===null){full=false;break;}if(full)cc.push(c);}var lines=rc.length+cc.length;if(lines>0){rc.forEach(function(r){for(var c=0;c<GRID;c++)board[r][c]=null;});cc.forEach(function(c){for(var r=0;r<GRID;r++)board[r][c]=null;});var bonus=[0,100,250,450,700,1000,1400,1900,2500,3200][Math.min(lines,9)];score+=bonus;}sel.textContent=score;if(score>best){best=score;localStorage.setItem("cb:best",best);bel.textContent=best;}}',
+'function checkOver(){return pieces.every(function(p,i){if(!p||i===dragIdx)return true;for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(canPlace(p,r,c))return false;return true;});}',
+'function gameOver(){document.getElementById("fs").textContent=score;document.getElementById("go").classList.add("show");try{window.parent.postMessage({type:"GAME_OVER",score:score},"*");}catch(e){}}',
+'function restart(){board=[];for(var r=0;r<GRID;r++){board[r]=[];for(var c=0;c<GRID;c++)board[r][c]=null;}score=0;sel.textContent=0;pieces=[null,null,null];refill();drag=null;dragIdx=-1;prev=null;document.getElementById("go").classList.remove("show");drawBoard();drawTray();}',
+'function cpEvt(canvas,e){var rect=canvas.getBoundingClientRect();var sx=canvas.width/rect.width,sy=canvas.height/rect.height;var cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-rect.left)*sx,y:(cy-rect.top)*sy};}',
+'function getTrayIdx(x){var sw=Math.floor(CELL*GRID/3);var i=Math.floor(x/sw);return(i>=0&&i<3&&pieces[i])?i:-1;}',
+'function calcPrev(p,bx2,by2){var col=Math.floor(bx2/CELL)-Math.floor(p.w/2);var row=Math.floor(by2/CELL)-Math.floor(p.h/2);var cells=p.c.map(function(x){return[row+x[0],col+x[1]];});return{valid:canPlace(p,row,col),cells:cells,row:row,col:col};}',
+'tc.addEventListener("mousedown",function(e){var pt=cpEvt(tc,e);var idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];var brect=bc.getBoundingClientRect();var trect=tc.getBoundingClientRect();dragX=(e.clientX-brect.left)*(bc.width/brect.width);dragY=bc.height+(e.clientY-trect.top)*(bc.height/brect.height);drawBoard();drawTray();});',
+'tc.addEventListener("touchstart",function(e){e.preventDefault();var pt=cpEvt(tc,e);var idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];var brect=bc.getBoundingClientRect();dragX=(e.touches[0].clientX-brect.left)*(bc.width/brect.width);dragY=(e.touches[0].clientY-brect.top)*(bc.height/brect.height)+CELL*.5;drawBoard();drawTray();},{passive:false});',
+'document.addEventListener("mousemove",function(e){if(!drag)return;var brect=bc.getBoundingClientRect();dragX=(e.clientX-brect.left)*(bc.width/brect.width);dragY=(e.clientY-brect.top)*(bc.height/brect.height);var bx2=dragX,by2=dragY+CELL;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();});',
+'document.addEventListener("touchmove",function(e){if(!drag)return;e.preventDefault();var brect=bc.getBoundingClientRect();dragX=(e.touches[0].clientX-brect.left)*(bc.width/brect.width);dragY=(e.touches[0].clientY-brect.top)*(bc.height/brect.height);var bx2=dragX,by2=dragY+CELL*.6;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();},{passive:false});',
+'function endDrag(){if(!drag)return;if(prev&&prev.valid){place(drag,prev.row,prev.col);pieces[dragIdx]=null;if(pieces.every(function(p){return!p;}))refill();if(checkOver())setTimeout(gameOver,400);}drag=null;dragIdx=-1;prev=null;drawBoard();drawTray();}',
+'document.addEventListener("mouseup",endDrag);document.addEventListener("touchend",endDrag);',
+'window.addEventListener("resize",function(){resize();drawBoard();drawTray();});',
+'resize();restart();',
+'<\/script></body></html>'
+];
+var CAT_BLAST_HTML=CAT_BLAST_LINES.join('\n');
 
-// ═══════════════════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════════════════
-function App() {
-  const [screen, setScreen] = useState('boot');
-  const [user, setUser] = useState(null);
-  const [scores, setScores] = useState({});
-  const [customGames, setCustomGames] = useState([]);
-
-  const allGames = [...BUILT_IN_GAMES, ...customGames];
-
-  useEffect(() => { init(); }, []);
-
-  function init() {
-    const email = localStorage.getItem('gc:me');
-    const users = gs('gc:users') || [];
-    const cg = gs('gc:custom-games') || [];
-    setCustomGames(cg);
-    if (email) {
-      const u = users.find(x => x.email === email);
-      if (u) { setUser(u); loadScores([...BUILT_IN_GAMES,...cg]); setScreen('hub'); return; }
-    }
-    setScreen('login');
-  }
-
-  function loadScores(games) {
-    const s = {};
-    for (const g of games) {
-      const raw = gs(`gc:scores:${g.id}`) || [];
-      s[g.id] = raw.sort((a,b)=>b.score-a.score).slice(0,5);
-    }
-    setScores(s);
-  }
-
-  function submitScore(gameId, pts) {
-    const raw = gs(`gc:scores:${gameId}`) || [];
-    const entry = { email:user.email, displayName:user.displayName, score:pts, date:Date.now() };
-    const updated = [...raw, entry];
-    ss(`gc:scores:${gameId}`, updated);
-    const top5 = updated.sort((a,b)=>b.score-a.score).slice(0,5);
-    const rank = top5.findIndex(s=>s.email===user.email&&s.score===pts)+1;
-    setScores(prev=>({...prev,[gameId]:top5}));
-    return { top5, rank };
-  }
-
-  function uploadGame(gameData) {
-    const existing = gs('gc:custom-games') || [];
-    const updated = [...existing.filter(g=>g.id!==gameData.id), gameData];
-    ss('gc:custom-games', updated);
-    setCustomGames(updated);
-    setScores(prev=>({...prev,[gameData.id]: gs(`gc:scores:${gameData.id}`)||[]}));
-  }
-
-  function deleteCustomGame(id) {
-    const updated = (gs('gc:custom-games')||[]).filter(g=>g.id!==id);
-    ss('gc:custom-games', updated);
-    setCustomGames(updated);
-    setScores(prev=>{const n={...prev};delete n[id];return n;});
-  }
-
-  function logout() { localStorage.removeItem('gc:me'); setUser(null); setScreen('login'); }
-
-  function playGame(game) {
-    launchGameOverlay(game, submitScore);
-  }
-
-  if (screen==='boot') return <Boot/>;
-  if (screen==='login') return <Login setUser={setUser} setScreen={setScreen} setCustomGames={setCustomGames} loadScores={loadScores}/>;
-  if (screen==='hub') return <Hub user={user} scores={scores} allGames={allGames} customGames={customGames} onPlay={playGame} onBoard={g=>setScreen('board:'+g.id)} onInvite={()=>setScreen('invite')} onUpload={()=>setScreen('upload')} onLogout={logout}/>;
-  if (screen.startsWith('board:')) {
-    const gid = screen.slice(6);
-    const g = allGames.find(x=>x.id===gid);
-    return <BoardScreen game={g} allGames={allGames} allScores={scores} onPlay={playGame} onBack={()=>setScreen('hub')}/>;
-  }
-  if (screen==='invite') return <InviteScreen user={user} onBack={()=>setScreen('hub')}/>;
-  if (screen==='upload') return <UploadScreen user={user} onUpload={uploadGame} customGames={customGames} onDelete={deleteCustomGame} onBack={()=>setScreen('hub')}/>;
-  return null;
-}
-
-// ═══════════════════════════════════════════════════════
-// BOOT
-// ═══════════════════════════════════════════════════════
-function Boot() {
-  return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:16}}>
-      <div className="logo-font" style={{fontSize:22,fontWeight:900,color:'#a78bfa'}}>GAME CENTER</div>
-      <div style={{width:34,height:34,border:'3px solid rgba(167,139,250,.2)',borderTop:'3px solid #a78bfa',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════
-// LOGIN
-// ═══════════════════════════════════════════════════════
-function Login({setUser, setScreen, setCustomGames, loadScores}) {
-  const [step, setStep] = useState('email'); // email | password | create
-  const [email, setEmail] = useState('');
-  const [pwd, setPwd] = useState('');
-  const [pwd2, setPwd2] = useState('');
-  const [err, setErr] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  function handleEmail() {
-    const e = email.trim().toLowerCase();
-    if (!e.includes('@gmail.com')) { setErr('Please enter a valid Gmail address.'); return; }
-    const users = gs('gc:users') || [];
-    const invites = gs('gc:invites') || [];
-    if (users.find(u=>u.email===e)) { setStep('password'); setErr(''); return; }
-    if (e === FOUNDER_EMAIL && users.length === 0) { setStep('create'); setErr(''); return; }
-    if (invites.find(i=>i.email===e&&i.status==='pending')) { setStep('create'); setErr(''); return; }
-    setErr('Access denied. This Game Center is invite-only. Ask a member to invite you.');
-  }
-
-  async function handleLogin() {
-    setLoading(true); setErr('');
-    const users = gs('gc:users') || [];
-    const u = users.find(x=>x.email===email.trim().toLowerCase());
-    if (!u) { setErr('User not found.'); setLoading(false); return; }
-    const hash = await hashPwd(pwd);
-    if (hash !== u.passwordHash) { setErr('Incorrect password.'); setLoading(false); return; }
-    localStorage.setItem('gc:me', u.email);
-    setUser(u);
-    const cg = gs('gc:custom-games') || [];
-    setCustomGames(cg);
-    loadScores([...BUILT_IN_GAMES,...cg]);
-    setScreen('hub');
-    setLoading(false);
-  }
-
-  async function handleCreate() {
-    if (pwd.length < 6) { setErr('Password must be at least 6 characters.'); return; }
-    if (pwd !== pwd2) { setErr('Passwords do not match.'); return; }
-    setLoading(true); setErr('');
-    const e = email.trim().toLowerCase();
-    const users = gs('gc:users') || [];
-    const invites = gs('gc:invites') || [];
-    const isFounder = e === FOUNDER_EMAIL && users.length === 0;
-    const hash = await hashPwd(pwd);
-    const u = { email:e, displayName:e.split('@')[0], passwordHash:hash, isAdmin:isFounder, joinedAt:Date.now(), invitedBy:isFounder?null:(invites.find(i=>i.email===e)?.by||null) };
-    const newInvites = invites.map(i=>i.email===e?{...i,status:'accepted'}:i);
-    ss('gc:users',[...users,u]);
-    ss('gc:invites',newInvites);
-    localStorage.setItem('gc:me',e);
-    setUser(u);
-    const cg = gs('gc:custom-games')||[];
-    setCustomGames(cg);
-    loadScores([...BUILT_IN_GAMES,...cg]);
-    setScreen('hub');
-    setLoading(false);
-  }
-
-  return (
-    <div className="screen" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20,background:'radial-gradient(ellipse at center,#0d0d2a 0%,#07070f 70%)'}}>
-      <div style={{position:'fixed',inset:0,overflow:'hidden',pointerEvents:'none'}}>
-        {[...Array(5)].map((_,i)=>(
-          <div key={i} style={{position:'absolute',borderRadius:'50%',width:280+i*80,height:280+i*80,border:`1px solid rgba(109,40,217,${.04+i*.01})`,top:'50%',left:'50%',transform:'translate(-50%,-50%)'}}/>
-        ))}
-      </div>
-      <div style={{maxWidth:380,width:'100%',textAlign:'center',position:'relative',zIndex:1}}>
-        <div style={{fontSize:52,marginBottom:10}}>🎮</div>
-        <h1 className="logo-font" style={{fontSize:24,fontWeight:900,margin:'0 0 4px',background:'linear-gradient(135deg,#a78bfa,#f472b6,#38bdf8)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundSize:'200%',animation:'shimmer 4s linear infinite'}}>
-          GAME CENTER
-        </h1>
-        <p style={{color:'rgba(255,255,255,.3)',margin:'0 0 28px',fontSize:12,letterSpacing:.06}}>INVITE ONLY · COMPETE · WIN</p>
-
-        <div className="card" style={{textAlign:'left'}}>
-          {step === 'email' && <>
-            <p style={{margin:'0 0 12px',color:'rgba(255,255,255,.45)',fontSize:13}}>Enter your Gmail address to continue</p>
-            <input className="inp" type="email" placeholder="you@gmail.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEmail()} style={{marginBottom:12}}/>
-            {err && <p style={{color:'#f87171',fontSize:13,margin:'0 0 10px'}}>{err}</p>}
-            <button className="btn btn-purple btn-full" onClick={handleEmail} style={{padding:14,fontSize:15}}>CONTINUE →</button>
-          </>}
-
-          {step === 'password' && <>
-            <div style={{marginBottom:14}}>
-              <button onClick={()=>{setStep('email');setErr('');setPwd('');}} style={{background:'none',border:'none',color:'rgba(255,255,255,.4)',cursor:'pointer',fontSize:13,padding:0}}>← {email}</button>
-            </div>
-            <p style={{margin:'0 0 12px',color:'rgba(255,255,255,.45)',fontSize:13}}>Enter your password</p>
-            <input className="inp" type="password" placeholder="Password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} style={{marginBottom:12}}/>
-            {err && <p style={{color:'#f87171',fontSize:13,margin:'0 0 10px'}}>{err}</p>}
-            <button className="btn btn-purple btn-full" onClick={handleLogin} disabled={loading} style={{padding:14,fontSize:15}}>{loading?'CHECKING…':'SIGN IN →'}</button>
-          </>}
-
-          {step === 'create' && <>
-            <div style={{marginBottom:14}}>
-              <button onClick={()=>{setStep('email');setErr('');setPwd('');setPwd2('');}} style={{background:'none',border:'none',color:'rgba(255,255,255,.4)',cursor:'pointer',fontSize:13,padding:0}}>← {email}</button>
-            </div>
-            <p style={{margin:'0 0 4px',fontSize:15,fontWeight:600}}>Welcome! 🎉</p>
-            <p style={{margin:'0 0 14px',color:'rgba(255,255,255,.4)',fontSize:13}}>{email === FOUNDER_EMAIL ? "You're the founding member. Create your password." : "You've been invited! Create your password."}</p>
-            <input className="inp" type="password" placeholder="Create password (min 6 chars)" value={pwd} onChange={e=>setPwd(e.target.value)} style={{marginBottom:10}}/>
-            <input className="inp" type="password" placeholder="Confirm password" value={pwd2} onChange={e=>setPwd2(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleCreate()} style={{marginBottom:12}}/>
-            {err && <p style={{color:'#f87171',fontSize:13,margin:'0 0 10px'}}>{err}</p>}
-            <button className="btn btn-purple btn-full" onClick={handleCreate} disabled={loading} style={{padding:14,fontSize:15}}>{loading?'CREATING…':'CREATE & ENTER →'}</button>
-          </>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════
-// HUB
-// ═══════════════════════════════════════════════════════
-function Hub({user, scores, allGames, customGames, onPlay, onBoard, onInvite, onUpload, onLogout}) {
-  return (
-    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
-      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <div>
-          <div className="logo-font" style={{fontSize:15,fontWeight:700,color:'#a78bfa',letterSpacing:.08}}>GAME CENTER</div>
-          <div style={{fontSize:11,color:'rgba(255,255,255,.3)',marginTop:1}}>
-            👋 <span style={{color:'#f0f0ff',fontWeight:600}}>{user.displayName}</span>
-            {user.isAdmin && <span className="tag" style={{background:'rgba(167,139,250,.15)',color:'#a78bfa',marginLeft:6}}>ADMIN</span>}
-          </div>
-        </div>
-        <div style={{display:'flex',gap:7}}>
-          <button className="btn btn-ghost" style={{padding:'8px 12px',fontSize:12}} onClick={onInvite}>👥 Invite</button>
-          <button className="btn btn-ghost" style={{padding:'8px 12px',fontSize:12}} onClick={onUpload}>⬆ Games</button>
-          <button className="btn btn-ghost" style={{padding:'8px 10px',fontSize:15}} onClick={onLogout} title="Sign out">⏏</button>
-        </div>
-      </div>
-
-      <div style={{padding:'18px 18px 0'}}>
-        <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.14,textTransform:'uppercase',marginBottom:13,fontFamily:"'Orbitron',monospace"}}>ARCADE</div>
-        <div style={{display:'flex',flexDirection:'column',gap:13}}>
-          {allGames.map(g => {
-            const top = (scores[g.id]||[])[0];
-            return (
-              <div key={g.id} className="card" style={{overflow:'hidden',position:'relative',borderColor:'rgba(255,255,255,.07)'}}>
-                <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:g.bg||'linear-gradient(135deg,#7c3aed,#4f46e5)'}}/>
-                <div style={{position:'absolute',right:14,top:12,fontSize:48,opacity:.07,filter:'blur(1px)'}}>{g.emoji}</div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:13}}>
-                  <div>
-                    <div style={{fontSize:26,marginBottom:5}}>{g.emoji}</div>
-                    <h3 className="logo-font" style={{margin:'0 0 3px',fontSize:14,fontWeight:700,letterSpacing:.04}}>{g.name}</h3>
-                    <p style={{margin:0,fontSize:11,color:'rgba(255,255,255,.35)'}}>{g.description}</p>
-                  </div>
-                  {top ? (
-                    <div style={{textAlign:'right',flexShrink:0,maxWidth:96}}>
-                      <div style={{fontSize:9,color:'rgba(255,255,255,.3)',fontFamily:"'Orbitron',monospace",marginBottom:2}}>🏆 BEST</div>
-                      <div style={{fontSize:20,fontWeight:700,color:'#fbbf24',fontFamily:"'Orbitron',monospace"}}>{top.score}</div>
-                      <div style={{fontSize:10,color:'rgba(255,255,255,.3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{top.displayName}</div>
-                    </div>
-                  ) : <div style={{fontSize:10,color:'rgba(255,255,255,.2)'}}>No scores yet</div>}
-                </div>
-                <div style={{display:'flex',gap:8}}>
-                  <button className="btn btn-full" style={{background:g.bg||'linear-gradient(135deg,#7c3aed,#4f46e5)',padding:11,fontSize:13,flex:1}} onClick={()=>onPlay(g)}>▶ PLAY</button>
-                  <button className="btn btn-ghost" style={{padding:'11px 15px',fontSize:17,flexShrink:0}} onClick={()=>onBoard(g)} title="Leaderboard">📊</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Hall of Fame */}
-        <div style={{marginTop:22}}>
-          <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.14,textTransform:'uppercase',marginBottom:11,fontFamily:"'Orbitron',monospace"}}>HALL OF FAME</div>
-          <div className="card" style={{padding:'12px 16px'}}>
-            {allGames.map(g=>{
-              const top=(scores[g.id]||[])[0];
-              if(!top)return null;
-              return (
-                <div key={g.id} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
-                  <span style={{fontSize:14}}>{g.emoji}</span>
-                  <span style={{fontSize:12,color:'rgba(255,255,255,.45)',flex:1}}>{g.name}</span>
-                  <span style={{fontSize:11,color:'rgba(255,255,255,.4)'}}>{top.displayName}</span>
-                  <span className="logo-font" style={{fontSize:13,fontWeight:700,color:'#fbbf24',marginLeft:6}}>{top.score}</span>
-                </div>
-              );
-            })}
-            {allGames.every(g=>!(scores[g.id]||[]).length)&&(
-              <p style={{margin:0,color:'rgba(255,255,255,.2)',fontSize:13,textAlign:'center',padding:'6px 0'}}>No records yet — play to be first! 🚀</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════
-// LEADERBOARD
-// ═══════════════════════════════════════════════════════
-function BoardScreen({game, allGames, allScores, onPlay, onBack}) {
-  const [activeGame, setActiveGame] = useState(game);
-  const activeScores = allScores[activeGame?.id]||[];
-  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-  if (!game) return null;
-  return (
-    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
-      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
-        <button className="btn btn-ghost" style={{padding:'7px 12px',fontSize:13}} onClick={onBack}>← Back</button>
-        <div className="logo-font" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.5)',letterSpacing:.08}}>LEADERBOARD</div>
-      </div>
-      <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,.07)',overflowX:'auto'}}>
-        {allGames.map(g=>(
-          <button key={g.id} className="btn" onClick={()=>setActiveGame(g)}
-            style={{background:'transparent',borderRadius:0,padding:'11px 16px',fontSize:12,color:activeGame?.id===g.id?'#fff':'rgba(255,255,255,.3)',borderBottom:`2px solid ${activeGame?.id===g.id?(g.accent||'#a78bfa'):'transparent'}`,whiteSpace:'nowrap'}}>
-            {g.emoji} {g.name}
-          </button>
-        ))}
-      </div>
-      <div style={{padding:18}}>
-        <div style={{textAlign:'center',padding:'20px 0 18px'}}>
-          <div style={{fontSize:48,marginBottom:8}}>{activeGame?.emoji}</div>
-          <h2 className="logo-font" style={{margin:'0 0 3px',fontSize:16,fontWeight:700,color:activeGame?.accent||'#a78bfa'}}>{activeGame?.name}</h2>
-          <p style={{margin:'0 0 18px',fontSize:11,color:'rgba(255,255,255,.3)'}}>{activeGame?.description}</p>
-          <button className="btn" style={{background:activeGame?.bg||'linear-gradient(135deg,#7c3aed,#4f46e5)',padding:'10px 22px',fontSize:12}} onClick={()=>onPlay(activeGame)}>▶ PLAY NOW</button>
-        </div>
-        {activeScores.length===0 ? (
-          <div className="card" style={{textAlign:'center',color:'rgba(255,255,255,.2)',padding:28,fontSize:13}}>No scores yet — be first! 🚀</div>
-        ) : (
-          <div style={{display:'flex',flexDirection:'column',gap:9}}>
-            {activeScores.map((s,i)=>(
-              <div key={i} className="card" style={{display:'flex',alignItems:'center',gap:13,padding:'13px 15px',background:i===0?'rgba(251,191,36,.07)':'rgba(255,255,255,.04)',border:`1px solid ${i===0?'rgba(251,191,36,.3)':'rgba(255,255,255,.07)'}`,animation:`slideUp .25s ease-out ${i*.07}s both`}}>
-                <span style={{fontSize:22,minWidth:30}}>{medals[i]}</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.displayName}</div>
-                  <div style={{fontSize:10,color:'rgba(255,255,255,.3)'}}>{s.email}</div>
-                </div>
-                <div className="logo-font" style={{fontSize:20,fontWeight:700,color:'#fbbf24'}}>{s.score}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════
-// INVITE
-// ═══════════════════════════════════════════════════════
-function InviteScreen({user, onBack}) {
-  const [email, setEmail] = useState('');
-  const [msg, setMsg] = useState(null);
-  const [invites, setInvites] = useState(gs('gc:invites')||[]);
-  const mine = invites.filter(i=>i.by===user.email);
-
-  function send() {
-    const e = email.trim().toLowerCase();
-    if (!e.endsWith('@gmail.com')) { setMsg({ok:false,error:'Only Gmail addresses supported.'}); return; }
-    const users = gs('gc:users')||[];
-    const invites = gs('gc:invites')||[];
-    if (users.find(u=>u.email===e)) { setMsg({ok:false,error:'Already a member!'}); return; }
-    if (invites.find(i=>i.email===e&&i.status==='pending')) { setMsg({ok:false,error:'Already invited!'}); return; }
-    ss('gc:invites',[...invites,{email:e,by:user.email,byName:user.displayName,at:Date.now(),status:'pending'}]);
-    setMsg({ok:true, sentTo:e}); setEmail(''); setInvites(gs('gc:invites')||[]);
-  }
-
-  return (
-    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
-      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
-        <button className="btn btn-ghost" style={{padding:'7px 12px',fontSize:13}} onClick={onBack}>← Back</button>
-        <div className="logo-font" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.5)',letterSpacing:.08}}>INVITE FRIENDS</div>
-      </div>
-      <div style={{padding:18}}>
-        <p style={{color:'rgba(255,255,255,.35)',fontSize:13,marginBottom:18}}>Game Center is invite-only. Invite a friend with their Gmail address. They will need to visit this page and enter their email to create a password.</p>
-        <div className="card" style={{marginBottom:18}}>
-          <label style={{display:'block',fontSize:10,color:'rgba(255,255,255,.35)',letterSpacing:.12,marginBottom:10,fontFamily:"'Orbitron',monospace"}}>GMAIL ADDRESS</label>
-          <input className="inp" type="email" placeholder="friend@gmail.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} style={{marginBottom:12}}/>
-          {msg&&<p style={{fontSize:13,margin:'0 0 10px',color:msg.ok?'#4ade80':'#f87171'}}>{msg.ok?`✅ Invite sent to ${msg.sentTo}!`:`❌ ${msg.error}`}</p>}
-          <button className="btn btn-purple btn-full" onClick={send} style={{padding:12,fontSize:14}}>SEND INVITE →</button>
-        </div>
-        {mine.length>0&&(
-          <>
-            <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.12,textTransform:'uppercase',marginBottom:11,fontFamily:"'Orbitron',monospace"}}>YOUR INVITES</div>
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              {mine.map((inv,i)=>(
-                <div key={i} className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 14px'}}>
-                  <span style={{fontSize:13,color:'rgba(255,255,255,.65)'}}>{inv.email}</span>
-                  <span className="tag" style={{background:inv.status==='accepted'?'rgba(74,222,128,.12)':'rgba(255,255,255,.06)',color:inv.status==='accepted'?'#4ade80':'rgba(255,255,255,.4)'}}>{inv.status.toUpperCase()}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════
-// UPLOAD GAMES
-// ═══════════════════════════════════════════════════════
-function UploadScreen({user, onUpload, customGames, onDelete, onBack}) {
-  const [dragging, setDragging] = useState(false);
-  const [status, setStatus] = useState(null);
-  const fileRef = useRef(null);
-
-  function processFile(file) {
-    if (!file.name.endsWith('.html')) { setStatus({ok:false,error:'Only .html files are supported.'}); return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-      const html = e.target.result;
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html,'text/html');
-      const name = doc.querySelector('meta[name="game-name"]')?.content || file.name.replace('.html','');
-      const emoji = doc.querySelector('meta[name="game-emoji"]')?.content || '🎮';
-      const description = doc.querySelector('meta[name="game-description"]')?.content || 'A custom game';
-      const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,30) + '-' + Date.now().toString(36);
-      onUpload({ id, name, emoji, description, html, bg:'linear-gradient(135deg,#0f766e,#0d9488)', accent:'#2dd4bf', builtin:false });
-      setStatus({ok:true, name});
-    };
-    reader.readAsText(file);
-  }
-
-  function onFileChange(e) { if (e.target.files[0]) processFile(e.target.files[0]); }
-
-  function onDrop(e) {
-    e.preventDefault(); setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) processFile(file);
-  }
-
-  return (
-    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
-      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
-        <button className="btn btn-ghost" style={{padding:'7px 12px',fontSize:13}} onClick={onBack}>← Back</button>
-        <div className="logo-font" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.5)',letterSpacing:.08}}>MANAGE GAMES</div>
-      </div>
-      <div style={{padding:18}}>
-        <p style={{color:'rgba(255,255,255,.35)',fontSize:13,marginBottom:18}}>Upload a compatible HTML game file. Games must include a <code style={{background:'rgba(255,255,255,.08)',padding:'1px 5px',borderRadius:4,fontSize:11}}>window.parent.postMessage</code> score call when the game ends.</p>
-
-        {/* Drop zone */}
-        <div
-          onDragOver={e=>{e.preventDefault();setDragging(true)}}
-          onDragLeave={()=>setDragging(false)}
-          onDrop={onDrop}
-          onClick={()=>fileRef.current.click()}
-          style={{border:`2px dashed ${dragging?'#a78bfa':'rgba(255,255,255,.15)'}`,borderRadius:14,padding:'32px 20px',textAlign:'center',cursor:'pointer',marginBottom:18,transition:'border-color .2s',background:dragging?'rgba(167,139,250,.06)':'transparent'}}>
-          <div style={{fontSize:36,marginBottom:10}}>📁</div>
-          <div style={{fontWeight:600,fontSize:15,marginBottom:4}}>{dragging?'Drop it!':'Drag & drop your game here'}</div>
-          <div style={{color:'rgba(255,255,255,.35)',fontSize:13}}>or click to browse — .html files only</div>
-          <input ref={fileRef} type="file" accept=".html" onChange={onFileChange} style={{display:'none'}}/>
-        </div>
-
-        {status && (
-          <div style={{padding:'12px 16px',borderRadius:11,marginBottom:18,background:status.ok?'rgba(74,222,128,.1)':'rgba(248,113,113,.1)',border:`1px solid ${status.ok?'rgba(74,222,128,.3)':'rgba(248,113,113,.3)'}`,color:status.ok?'#4ade80':'#f87171',fontSize:13}}>
-            {status.ok ? `✅ "${status.name}" uploaded and added to the arcade!` : `❌ ${status.error}`}
-          </div>
-        )}
-
-        {/* Custom games list */}
-        {customGames.length > 0 && (
-          <>
-            <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.12,textTransform:'uppercase',marginBottom:11,fontFamily:"'Orbitron',monospace"}}>UPLOADED GAMES</div>
-            <div style={{display:'flex',flexDirection:'column',gap:9}}>
-              {customGames.map(g=>(
-                <div key={g.id} className="card" style={{display:'flex',alignItems:'center',gap:12,padding:'12px 15px'}}>
-                  <span style={{fontSize:22}}>{g.emoji}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:14}}>{g.name}</div>
-                    <div style={{fontSize:11,color:'rgba(255,255,255,.3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.description}</div>
-                  </div>
-                  <button className="btn btn-red" style={{padding:'7px 11px',fontSize:12,flexShrink:0}} onClick={()=>onDelete(g.id)}>🗑</button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* Hint box */}
-        <div className="card" style={{marginTop:20,background:'rgba(167,139,250,.06)',border:'1px solid rgba(167,139,250,.15)'}}>
-          <div style={{fontSize:11,color:'#a78bfa',fontWeight:600,marginBottom:8,fontFamily:"'Orbitron',monospace",letterSpacing:.08}}>💡 HOW TO CREATE A GAME</div>
-          <p style={{fontSize:12,color:'rgba(255,255,255,.45)',lineHeight:1.6,margin:0}}>
-            Ask any AI assistant to build you a game. Include these requirements in your prompt:
-            <br/><br/>
-            <span style={{color:'rgba(255,255,255,.6)'}}>1.</span> Single standalone HTML file<br/>
-            <span style={{color:'rgba(255,255,255,.6)'}}>2.</span> Mobile-first design<br/>
-            <span style={{color:'rgba(255,255,255,.6)'}}>3.</span> Add these meta tags: <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>game-name</code>, <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>game-emoji</code>, <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>game-description</code><br/>
-            <span style={{color:'rgba(255,255,255,.6)'}}>4.</span> When game ends, call: <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>window.parent.postMessage({'{'}"type":"GAME_OVER","score":N{'}'},'*')</code><br/><br/>
-            See the included <strong>GAME_README.md</strong> file for full prompting templates.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-ReactDOM.render(<App/>, document.getElementById('root'));
+/* ================================================================
+   START
+================================================================ */
+renderBoot(document.getElementById('app'));
 </script>
 </body>
 </html>
