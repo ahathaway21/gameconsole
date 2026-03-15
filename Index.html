@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Game Center</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+body{background:#07070f;color:#f0f0ff;font-family:'Syne',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:4px;background:#0d0d1a}
+::-webkit-scrollbar-thumb{background:#6d28d9;border-radius:2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
+@keyframes popIn{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.screen{animation:slideUp .28s ease-out}
+.card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:18px}
+.btn{border:none;border-radius:11px;padding:13px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:transform .12s,filter .12s;color:#fff}
+.btn:active{transform:scale(.96)}
+.btn:hover{filter:brightness(1.15)}
+.btn-ghost{background:rgba(255,255,255,.07);color:#f0f0ff}
+.btn-purple{background:linear-gradient(135deg,#7c3aed,#5b21b6)}
+.btn-red{background:linear-gradient(135deg,#dc2626,#b91c1c)}
+.btn-full{width:100%}
+.inp{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:13px 16px;color:#f0f0ff;font-size:15px;outline:none;font-family:'Syne',sans-serif;transition:border-color .2s}
+.inp:focus{border-color:rgba(167,139,250,.6)}
+.logo-font{font-family:'Orbitron',monospace;letter-spacing:.05em}
+.tag{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.04em}
+#game-overlay{position:fixed;inset:0;z-index:9999;display:none;flex-direction:column;background:#000}
+#game-overlay.active{display:flex}
+#game-iframe{flex:1;border:none;width:100%;height:100%}
+#game-back-bar{background:rgba(0,0,0,.9);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0}
+#score-panel{position:fixed;inset:0;z-index:10000;background:rgba(7,7,15,.95);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#score-panel.active{display:flex;animation:fadeIn .3s ease-out}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CAT BLAST GAME  (embedded as template — safe from HTML parser)
+═══════════════════════════════════════════════════════════════════ -->
+<div id="cat-blast-tpl" style="display:none"></div>
+
+<div id="root"></div>
+
+<!-- Game overlay (iframe host) -->
+<div id="game-overlay">
+  <div id="game-back-bar">
+    <button id="game-back-btn" class="btn btn-ghost" style="padding:8px 14px;font-size:13px">← Hub</button>
+    <div id="game-title-bar" class="logo-font" style="font-size:13px;color:rgba(255,255,255,.5)"></div>
+    <div style="width:80px"></div>
+  </div>
+  <iframe id="game-iframe" sandbox="allow-scripts allow-same-origin" allowtransparency="true"></iframe>
+</div>
+
+<!-- Score panel (shown after game over) -->
+<div id="score-panel">
+  <div id="sp-emoji" style="font-size:64px;margin-bottom:12px"></div>
+  <h2 class="logo-font" style="font-size:22px;font-weight:900;margin-bottom:6px">GAME OVER</h2>
+  <p style="color:rgba(255,255,255,.4);font-size:13px;margin-bottom:14px">Your score</p>
+  <div id="sp-score" class="logo-font" style="font-size:54px;font-weight:900;color:#fbbf24;line-height:1;text-shadow:0 0 20px rgba(251,191,36,.5)"></div>
+  <div id="sp-rank" style="font-size:14px;font-weight:600;margin-top:10px"></div>
+  <div id="sp-leaderboard" style="width:100%;max-width:360px;margin-top:24px"></div>
+  <div style="display:flex;gap:12px;margin-top:24px">
+    <button id="sp-back" class="btn btn-ghost" style="flex:1">← Hub</button>
+    <button id="sp-again" class="btn btn-purple" style="flex:1">🔄 Play Again</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ═══════════════════════════════════════════════════════
+// CAT BLAST HTML  (</script> escaped as <\/script>)
+// ═══════════════════════════════════════════════════════
+const CAT_BLAST_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="game-name" content="Cat Blast">
+<meta name="game-emoji" content="🐱">
+<meta name="game-description" content="Block Blast with 7 cat breeds! Fill rows and columns to clear them and score.">
+<title>Cat Blast</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}
+body{background:#0c0620;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden;font-family:'Fredoka One',cursive;padding:8px 0 0}
+#sbar{display:flex;gap:12px;margin-bottom:8px;padding:0 8px;width:100%;justify-content:center}
+.sbox{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:5px 22px;text-align:center}
+.slbl{font-size:9px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase}
+.sval{font-size:1.7rem;color:#FFD700;line-height:1.2}
+canvas{display:block;border-radius:10px}
+#tray{margin-top:10px}
+#go{position:fixed;inset:0;background:rgba(5,1,18,.88);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20}
+#go.show{display:flex}
+.got{font-size:2.2rem;color:#FFD700}
+.gos{font-size:3.2rem;color:#fff;line-height:1}
+.gob{background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:14px;padding:14px 36px;color:#fff;font-size:1.1rem;font-family:'Fredoka One',cursive;cursor:pointer;margin-top:4px}
+</style>
+</head>
+<body>
+<div id="sbar">
+  <div class="sbox"><div class="slbl">SCORE</div><div class="sval" id="sel">0</div></div>
+  <div class="sbox"><div class="slbl">BEST</div><div class="sval" id="bel">0</div></div>
+</div>
+<canvas id="bc"></canvas>
+<canvas id="tc" style="margin-top:10px"></canvas>
+<div id="go">
+  <div class="got">GAME OVER 🐱</div>
+  <div class="gos" id="fs">0</div>
+  <button class="gob" onclick="restart()">PLAY AGAIN</button>
+</div>
+<script>
+const GRID=9;let CELL=40;
+let score=0,best=+(localStorage.getItem('cb:best')||0);
+let board=[],pieces=[null,null,null];
+let drag=null,dragIdx=-1,dragX=0,dragY=0,prev=null;
+const sel=document.getElementById('sel');
+const bel=document.getElementById('bel');
+bel.textContent=best;
+const bc=document.getElementById('bc');
+const tc=document.getElementById('tc');
+const bx=bc.getContext('2d');
+const tx=tc.getContext('2d');
+
+function resize(){
+  const mw=Math.min(window.innerWidth-16,420);
+  CELL=Math.floor(mw/GRID);
+  bc.width=bc.height=CELL*GRID;
+  tc.width=CELL*GRID;tc.height=Math.ceil(CELL*3.2);
+}
+
+const B=[
+  {n:'Orange Tabby',bg:'#F97316',dt:'#C2410C',ey:'#16A34A',t:'stripe'},
+  {n:'Tuxedo',bg:'#1c1c24',dt:'#FFFFFF',ey:'#22C55E',t:'chest'},
+  {n:'Calico',bg:'#FEF3C7',dt:'#F97316',ey:'#3B82F6',t:'patch'},
+  {n:'Siamese',bg:'#FDE68A',dt:'#78350F',ey:'#60A5FA',t:'point'},
+  {n:'Russian Blue',bg:'#6B7280',dt:'#9CA3AF',ey:'#4ADE80',t:'shim'},
+  {n:'Flame Point',bg:'#F1F5F9',dt:'#F97316',ey:'#93C5FD',t:'flame'},
+  {n:'Snow Bengal',bg:'#F8FAFC',dt:'#475569',ey:'#A78BFA',t:'spot'},
+];
+
+const SH=[
+  {b:3,c:[[0,0]]},
+  {b:3,c:[[0,0],[0,1],[0,2]]},{b:3,c:[[0,0],[1,0],[2,0]]},
+  {b:3,c:[[0,0],[0,1],[0,2],[0,3]]},{b:3,c:[[0,0],[1,0],[2,0],[3,0]]},
+  {b:0,c:[[0,0],[0,1],[1,1],[1,2]]},{b:0,c:[[0,1],[0,2],[1,0],[1,1]]},
+  {b:0,c:[[0,0],[1,0],[1,1],[2,1]]},{b:0,c:[[0,1],[1,0],[1,1],[2,0]]},
+  {b:1,c:[[0,0],[0,1],[1,0],[1,1]]},
+  {b:1,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]},
+  {b:1,c:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]]},
+  {b:2,c:[[0,0],[1,0],[1,1]]},{b:2,c:[[0,0],[0,1],[1,0]]},
+  {b:2,c:[[0,0],[1,0],[2,0],[2,1]]},{b:2,c:[[0,0],[0,1],[0,2],[1,0]]},
+  {b:2,c:[[0,2],[1,2],[2,0],[2,1],[2,2]]},{b:2,c:[[0,0],[1,0],[2,0],[0,1],[0,2]]},
+  {b:4,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]},
+  {b:4,c:[[0,0],[0,1],[0,2],[0,3],[0,4]]},{b:4,c:[[0,0],[1,0],[2,0],[3,0],[4,0]]},
+  {b:5,c:[[0,0],[0,1],[0,2],[1,1]]},{b:5,c:[[0,1],[1,0],[1,1],[2,1]]},
+  {b:5,c:[[0,1],[1,0],[1,1],[1,2],[2,1]]},
+  {b:6,c:[[0,0],[1,0],[2,0],[2,1],[2,2]]},{b:6,c:[[0,0],[0,1],[0,2],[1,2],[2,2]]},
+  {b:6,c:[[0,0],[0,1],[1,0],[2,0],[2,1]]},{b:6,c:[[0,1],[1,1],[2,0],[2,1]]},
+];
+
+function cat(ctx,px,py,bi,sz){
+  const br=B[bi],r=sz*.12,half=sz*.5;
+  ctx.save();
+  ctx.fillStyle=br.bg;
+  ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.fill();
+  if(br.t==='stripe'){
+    ctx.strokeStyle=br.dt;ctx.lineWidth=Math.max(1,sz*.07);
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(px+sz*.18,py+sz*(.22+i*.22));ctx.lineTo(px+sz*.82,py+sz*(.22+i*.22));ctx.stroke();}
+  }else if(br.t==='chest'){
+    ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+sz*.72,sz*.22,sz*.17,0,0,Math.PI*2);ctx.fill();
+  }else if(br.t==='patch'){
+    ctx.fillStyle=br.dt;ctx.beginPath();ctx.roundRect(px+sz*.54,py+sz*.1,sz*.34,sz*.32,sz*.05);ctx.fill();
+    ctx.fillStyle='#92400E';ctx.beginPath();ctx.roundRect(px+sz*.1,py+sz*.54,sz*.28,sz*.28,sz*.05);ctx.fill();
+  }else if(br.t==='point'){
+    ctx.fillStyle=br.dt;
+    ctx.beginPath();ctx.roundRect(px,py,sz*.38,sz*.38,r);ctx.fill();
+    ctx.beginPath();ctx.roundRect(px+sz*.62,py,sz*.38,sz*.38,r);ctx.fill();
+    ctx.beginPath();ctx.roundRect(px,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();
+    ctx.beginPath();ctx.roundRect(px+sz*.62,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();
+  }else if(br.t==='shim'){
+    ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+half,sz*.3,sz*.36,Math.PI/4,0,Math.PI*2);ctx.fill();
+  }else if(br.t==='flame'){
+    ctx.fillStyle=br.dt;
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(px+sz*(.18+i*.28),py);ctx.lineTo(px+sz*(.12+i*.28),py-sz*.12);ctx.lineTo(px+sz*(.34+i*.28),py);ctx.closePath();ctx.fill();}
+  }else if(br.t==='spot'){
+    ctx.fillStyle=br.dt;
+    [[.24,.18],[.62,.13],[.7,.48],[.18,.58],[.52,.62]].forEach(([sx,sy])=>{ctx.beginPath();ctx.ellipse(px+sz*sx,py+sz*sy,sz*.07,sz*.05,Math.PI/5,0,Math.PI*2);ctx.fill();});
+  }
+  const ec=bi===1?'#1c1c24':br.dt;
+  ctx.fillStyle=ec;
+  ctx.beginPath();ctx.moveTo(px+sz*.15,py+sz*.1);ctx.lineTo(px+sz*.06,py-sz*.11);ctx.lineTo(px+sz*.33,py+sz*.1);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(px+sz*.67,py+sz*.1);ctx.lineTo(px+sz*.94,py-sz*.11);ctx.lineTo(px+sz*.85,py+sz*.1);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(253,164,175,.6)';
+  ctx.beginPath();ctx.moveTo(px+sz*.17,py+sz*.1);ctx.lineTo(px+sz*.1,py-sz*.04);ctx.lineTo(px+sz*.29,py+sz*.1);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(px+sz*.71,py+sz*.1);ctx.lineTo(px+sz*.9,py-sz*.04);ctx.lineTo(px+sz*.83,py+sz*.1);ctx.closePath();ctx.fill();
+  const er=Math.max(2,sz*.09);
+  ctx.fillStyle='#111';ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=br.ey;ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(px+sz*.32,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(px+sz*.72,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fda4af';ctx.beginPath();ctx.moveTo(px+half,py+sz*.64);ctx.lineTo(px+sz*.46,py+sz*.59);ctx.lineTo(px+sz*.54,py+sz*.59);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.stroke();
+  ctx.restore();
+}
+
+function drawBoard(){
+  const S=CELL*GRID;
+  bx.fillStyle='#150b2e';bx.fillRect(0,0,S,S);
+  bx.strokeStyle='rgba(255,255,255,.035)';bx.lineWidth=1;
+  for(let i=0;i<=GRID;i++){bx.beginPath();bx.moveTo(i*CELL,0);bx.lineTo(i*CELL,S);bx.stroke();bx.beginPath();bx.moveTo(0,i*CELL);bx.lineTo(S,i*CELL);bx.stroke();}
+  for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(board[r][c]!==null)cat(bx,c*CELL+1,r*CELL+1,board[r][c],CELL-2);
+  if(prev&&drag){
+    prev.cells.forEach(([pr,pc])=>{
+      if(pr>=0&&pr<GRID&&pc>=0&&pc<GRID){
+        bx.fillStyle=prev.valid?'rgba(255,255,255,.22)':'rgba(255,60,60,.18)';
+        bx.beginPath();bx.roundRect(pc*CELL+1,pr*CELL+1,CELL-2,CELL-2,CELL*.1);bx.fill();
+      }
+    });
+  }
+  if(drag){
+    drag.c.forEach(([dr,dc])=>{
+      const px=dragX+dc*CELL-drag.w*CELL/2;
+      const py=dragY+dr*CELL-drag.h*CELL*1.1;
+      cat(bx,px,py,drag.b,CELL-2);
+    });
+  }
+}
+
+function drawTray(){
+  const W=CELL*GRID,H=tc.height;
+  tx.clearRect(0,0,W,H);
+  const sw=Math.floor(W/3);
+  for(let i=0;i<3;i++){
+    if(!pieces[i]||i===dragIdx)continue;
+    const p=pieces[i];
+    const mr=Math.max(...p.c.map(([r])=>r))+1;
+    const mc=Math.max(...p.c.map(([,c])=>c))+1;
+    const sc=Math.min((sw-14)/(mc*CELL),(H-14)/(mr*CELL),1);
+    const sz=Math.floor((CELL-1)*sc);
+    const ox=Math.floor(sw*i+(sw-mc*sz*1.04)/2);
+    const oy=Math.floor((H-mr*sz*1.04)/2)+4;
+    p.c.forEach(([r,c])=>cat(tx,ox+c*Math.floor(sz*1.04),oy+r*Math.floor(sz*1.04),p.b,sz));
+  }
+}
+
+function rp(){const s=SH[Math.floor(Math.random()*SH.length)];const rs=s.c.map(([r])=>r);const cs=s.c.map(([,c])=>c);return{...s,h:Math.max(...rs)+1,w:Math.max(...cs)+1};}
+function refill(){for(let i=0;i<3;i++)pieces[i]=rp();}
+function canPlace(p,row,col){return p.c.every(([r,c])=>{const nr=row+r,nc=col+c;return nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&board[nr][nc]===null;});}
+
+function place(p,row,col){
+  p.c.forEach(([r,c])=>{board[row+r][col+c]=p.b;});
+  score+=p.c.length*10;
+  const rc=[],cc=[];
+  for(let r=0;r<GRID;r++)if(board[r].every(v=>v!==null))rc.push(r);
+  for(let c=0;c<GRID;c++)if(board.every(row=>row[c]!==null))cc.push(c);
+  const lines=rc.length+cc.length;
+  if(lines>0){
+    rc.forEach(r=>{for(let c=0;c<GRID;c++)board[r][c]=null;});
+    cc.forEach(c=>{for(let r=0;r<GRID;r++)board[r][c]=null;});
+    const bonus=[0,100,250,450,700,1000,1400,1900,2500,3200][Math.min(lines,9)];
+    score+=bonus;
+  }
+  sel.textContent=score;
+  if(score>best){best=score;localStorage.setItem('cb:best',best);bel.textContent=best;}
+}
+
+function checkOver(){return pieces.every((p,i)=>{if(!p||i===dragIdx)return true;for(let r=0;r<GRID;r++)for(let c=0;c<GRID;c++)if(canPlace(p,r,c))return false;return true;});}
+
+function gameOver(){
+  document.getElementById('fs').textContent=score;
+  document.getElementById('go').classList.add('show');
+  try{window.parent.postMessage({type:'GAME_OVER',score},'*');}catch(e){}
+}
+
+function restart(){
+  board=Array.from({length:GRID},()=>Array(GRID).fill(null));
+  score=0;sel.textContent=0;
+  pieces=[null,null,null];refill();
+  drag=null;dragIdx=-1;prev=null;
+  document.getElementById('go').classList.remove('show');
+  drawBoard();drawTray();
+}
+
+function cp(canvas,e){const rect=canvas.getBoundingClientRect();const sx=canvas.width/rect.width,sy=canvas.height/rect.height;const cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-rect.left)*sx,y:(cy-rect.top)*sy};}
+
+function getTrayIdx(x){const sw=Math.floor(CELL*GRID/3);const i=Math.floor(x/sw);return(i>=0&&i<3&&pieces[i])?i:-1;}
+
+function calcPrev(p,bx2,by2){const col=Math.floor(bx2/CELL)-Math.floor(p.w/2);const row=Math.floor(by2/CELL)-Math.floor(p.h/2);const cells=p.c.map(([r,c])=>[row+r,col+c]);return{valid:canPlace(p,row,col),cells,row,col};}
+
+tc.addEventListener('mousedown',e=>{const pt=cp(tc,e);const idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];const brect=bc.getBoundingClientRect();const trect=tc.getBoundingClientRect();const sx=bc.width/brect.width;dragX=(e.clientX-brect.left)*sx;dragY=bc.height+(e.clientY-trect.top)*(bc.height/brect.height);drawBoard();drawTray();});
+tc.addEventListener('touchstart',e=>{e.preventDefault();const pt=cp(tc,e);const idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];const brect=bc.getBoundingClientRect();const sx=bc.width/brect.width;const sy=bc.height/brect.height;dragX=(e.touches[0].clientX-brect.left)*sx;dragY=(e.touches[0].clientY-brect.top)*sy+CELL*.5;drawBoard();drawTray();},{passive:false});
+
+document.addEventListener('mousemove',e=>{if(!drag)return;const brect=bc.getBoundingClientRect();const sx=bc.width/brect.width,sy=bc.height/brect.height;dragX=(e.clientX-brect.left)*sx;dragY=(e.clientY-brect.top)*sy;const bx2=dragX,by2=dragY+CELL;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();});
+document.addEventListener('touchmove',e=>{if(!drag)return;e.preventDefault();const brect=bc.getBoundingClientRect();const sx=bc.width/brect.width,sy=bc.height/brect.height;dragX=(e.touches[0].clientX-brect.left)*sx;dragY=(e.touches[0].clientY-brect.top)*sy;const bx2=dragX,by2=dragY+CELL*.6;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();},{passive:false});
+
+function endDrag(){if(!drag)return;if(prev&&prev.valid){place(drag,prev.row,prev.col);pieces[dragIdx]=null;if(pieces.every(p=>!p))refill();if(checkOver())setTimeout(gameOver,400);}drag=null;dragIdx=-1;prev=null;drawBoard();drawTray();}
+document.addEventListener('mouseup',endDrag);
+document.addEventListener('touchend',endDrag);
+window.addEventListener('resize',()=>{resize();drawBoard();drawTray();});
+resize();restart();
+<\/script>
+</body>
+</html>`;
+
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const FOUNDER_EMAIL = 'ahathaway21@gmail.com';
+
+const BUILT_IN_GAMES = [
+  { id:'cat-blast', name:'Cat Blast', emoji:'🐱',
+    description:'Block Blast with 7 cat breeds! Fill rows and columns to clear them.',
+    bg:'linear-gradient(135deg,#7c3aed,#be185d)', accent:'#f472b6', builtin:true }
+];
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+async function hashPwd(pwd) {
+  const data = new TextEncoder().encode(pwd + ':gc-salt-2025');
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+const gs = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+const ss = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+// ═══════════════════════════════════════════════════════
+// GAME OVERLAY MANAGER
+// ═══════════════════════════════════════════════════════
+let _currentGame = null;
+let _currentBlobUrl = null;
+let _onScoreCallback = null;
+
+function launchGameOverlay(game, onScore) {
+  _currentGame = game;
+  _onScoreCallback = onScore;
+  const html = game.builtin ? CAT_BLAST_HTML : game.html;
+  if (_currentBlobUrl) URL.revokeObjectURL(_currentBlobUrl);
+  const blob = new Blob([html], { type:'text/html' });
+  _currentBlobUrl = URL.createObjectURL(blob);
+  const iframe = document.getElementById('game-iframe');
+  const overlay = document.getElementById('game-overlay');
+  const titleBar = document.getElementById('game-title-bar');
+  iframe.src = _currentBlobUrl;
+  titleBar.textContent = `${game.emoji}  ${game.name.toUpperCase()}`;
+  overlay.classList.add('active');
+}
+
+function closeGameOverlay() {
+  document.getElementById('game-overlay').classList.remove('active');
+  document.getElementById('game-iframe').src = 'about:blank';
+  document.getElementById('score-panel').classList.remove('active');
+  if (_currentBlobUrl) { URL.revokeObjectURL(_currentBlobUrl); _currentBlobUrl = null; }
+  _currentGame = null;
+}
+
+window.addEventListener('message', e => {
+  if (e.data?.type === 'GAME_OVER' && _currentGame && _onScoreCallback) {
+    const result = _onScoreCallback(_currentGame.id, e.data.score);
+    showScorePanel(_currentGame, e.data.score, result.top5, result.rank);
+  }
+});
+
+function showScorePanel(game, pts, top5, rank) {
+  const panel = document.getElementById('score-panel');
+  document.getElementById('sp-emoji').textContent = pts >= 500 ? '🏆' : pts >= 200 ? '🎉' : '💪';
+  document.getElementById('sp-score').textContent = pts;
+  const rankLabels = ['🥇 #1 on the leaderboard!','🥈 #2 on the leaderboard!','🥉 #3 on the leaderboard!','4th place!','5th place!'];
+  const rl = document.getElementById('sp-rank');
+  rl.textContent = rank > 0 && rank <= 5 ? rankLabels[rank-1] : '';
+  rl.style.color = game.accent || '#a78bfa';
+  const lb = document.getElementById('sp-leaderboard');
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  lb.innerHTML = top5.map((s,i) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:8px;
+      background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:11px">
+      <span style="font-size:18px;min-width:26px">${medals[i]}</span>
+      <span style="flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Syne',sans-serif">${s.displayName}</span>
+      <span style="font-family:'Orbitron',monospace;font-weight:700;color:#fbbf24;font-size:15px">${s.score}</span>
+    </div>`).join('');
+  panel.classList.add('active');
+  document.getElementById('sp-back').onclick = () => { closeGameOverlay(); };
+  document.getElementById('sp-again').onclick = () => {
+    panel.classList.remove('active');
+    const iframe = document.getElementById('game-iframe');
+    iframe.src = _currentBlobUrl;
+  };
+}
+
+document.getElementById('game-back-btn').onclick = () => closeGameOverlay();
+
+// ═══════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════
+function App() {
+  const [screen, setScreen] = useState('boot');
+  const [user, setUser] = useState(null);
+  const [scores, setScores] = useState({});
+  const [customGames, setCustomGames] = useState([]);
+
+  const allGames = [...BUILT_IN_GAMES, ...customGames];
+
+  useEffect(() => { init(); }, []);
+
+  function init() {
+    const email = localStorage.getItem('gc:me');
+    const users = gs('gc:users') || [];
+    const cg = gs('gc:custom-games') || [];
+    setCustomGames(cg);
+    if (email) {
+      const u = users.find(x => x.email === email);
+      if (u) { setUser(u); loadScores([...BUILT_IN_GAMES,...cg]); setScreen('hub'); return; }
+    }
+    setScreen('login');
+  }
+
+  function loadScores(games) {
+    const s = {};
+    for (const g of games) {
+      const raw = gs(`gc:scores:${g.id}`) || [];
+      s[g.id] = raw.sort((a,b)=>b.score-a.score).slice(0,5);
+    }
+    setScores(s);
+  }
+
+  function submitScore(gameId, pts) {
+    const raw = gs(`gc:scores:${gameId}`) || [];
+    const entry = { email:user.email, displayName:user.displayName, score:pts, date:Date.now() };
+    const updated = [...raw, entry];
+    ss(`gc:scores:${gameId}`, updated);
+    const top5 = updated.sort((a,b)=>b.score-a.score).slice(0,5);
+    const rank = top5.findIndex(s=>s.email===user.email&&s.score===pts)+1;
+    setScores(prev=>({...prev,[gameId]:top5}));
+    return { top5, rank };
+  }
+
+  function uploadGame(gameData) {
+    const existing = gs('gc:custom-games') || [];
+    const updated = [...existing.filter(g=>g.id!==gameData.id), gameData];
+    ss('gc:custom-games', updated);
+    setCustomGames(updated);
+    setScores(prev=>({...prev,[gameData.id]: gs(`gc:scores:${gameData.id}`)||[]}));
+  }
+
+  function deleteCustomGame(id) {
+    const updated = (gs('gc:custom-games')||[]).filter(g=>g.id!==id);
+    ss('gc:custom-games', updated);
+    setCustomGames(updated);
+    setScores(prev=>{const n={...prev};delete n[id];return n;});
+  }
+
+  function logout() { localStorage.removeItem('gc:me'); setUser(null); setScreen('login'); }
+
+  function playGame(game) {
+    launchGameOverlay(game, submitScore);
+  }
+
+  if (screen==='boot') return <Boot/>;
+  if (screen==='login') return <Login setUser={setUser} setScreen={setScreen} setCustomGames={setCustomGames} loadScores={loadScores}/>;
+  if (screen==='hub') return <Hub user={user} scores={scores} allGames={allGames} customGames={customGames} onPlay={playGame} onBoard={g=>setScreen('board:'+g.id)} onInvite={()=>setScreen('invite')} onUpload={()=>setScreen('upload')} onLogout={logout}/>;
+  if (screen.startsWith('board:')) {
+    const gid = screen.slice(6);
+    const g = allGames.find(x=>x.id===gid);
+    return <BoardScreen game={g} allGames={allGames} allScores={scores} onPlay={playGame} onBack={()=>setScreen('hub')}/>;
+  }
+  if (screen==='invite') return <InviteScreen user={user} onBack={()=>setScreen('hub')}/>;
+  if (screen==='upload') return <UploadScreen user={user} onUpload={uploadGame} customGames={customGames} onDelete={deleteCustomGame} onBack={()=>setScreen('hub')}/>;
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════
+function Boot() {
+  return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:16}}>
+      <div className="logo-font" style={{fontSize:22,fontWeight:900,color:'#a78bfa'}}>GAME CENTER</div>
+      <div style={{width:34,height:34,border:'3px solid rgba(167,139,250,.2)',borderTop:'3px solid #a78bfa',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════
+function Login({setUser, setScreen, setCustomGames, loadScores}) {
+  const [step, setStep] = useState('email'); // email | password | create
+  const [email, setEmail] = useState('');
+  const [pwd, setPwd] = useState('');
+  const [pwd2, setPwd2] = useState('');
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  function handleEmail() {
+    const e = email.trim().toLowerCase();
+    if (!e.includes('@gmail.com')) { setErr('Please enter a valid Gmail address.'); return; }
+    const users = gs('gc:users') || [];
+    const invites = gs('gc:invites') || [];
+    if (users.find(u=>u.email===e)) { setStep('password'); setErr(''); return; }
+    if (e === FOUNDER_EMAIL && users.length === 0) { setStep('create'); setErr(''); return; }
+    if (invites.find(i=>i.email===e&&i.status==='pending')) { setStep('create'); setErr(''); return; }
+    setErr('Access denied. This Game Center is invite-only. Ask a member to invite you.');
+  }
+
+  async function handleLogin() {
+    setLoading(true); setErr('');
+    const users = gs('gc:users') || [];
+    const u = users.find(x=>x.email===email.trim().toLowerCase());
+    if (!u) { setErr('User not found.'); setLoading(false); return; }
+    const hash = await hashPwd(pwd);
+    if (hash !== u.passwordHash) { setErr('Incorrect password.'); setLoading(false); return; }
+    localStorage.setItem('gc:me', u.email);
+    setUser(u);
+    const cg = gs('gc:custom-games') || [];
+    setCustomGames(cg);
+    loadScores([...BUILT_IN_GAMES,...cg]);
+    setScreen('hub');
+    setLoading(false);
+  }
+
+  async function handleCreate() {
+    if (pwd.length < 6) { setErr('Password must be at least 6 characters.'); return; }
+    if (pwd !== pwd2) { setErr('Passwords do not match.'); return; }
+    setLoading(true); setErr('');
+    const e = email.trim().toLowerCase();
+    const users = gs('gc:users') || [];
+    const invites = gs('gc:invites') || [];
+    const isFounder = e === FOUNDER_EMAIL && users.length === 0;
+    const hash = await hashPwd(pwd);
+    const u = { email:e, displayName:e.split('@')[0], passwordHash:hash, isAdmin:isFounder, joinedAt:Date.now(), invitedBy:isFounder?null:(invites.find(i=>i.email===e)?.by||null) };
+    const newInvites = invites.map(i=>i.email===e?{...i,status:'accepted'}:i);
+    ss('gc:users',[...users,u]);
+    ss('gc:invites',newInvites);
+    localStorage.setItem('gc:me',e);
+    setUser(u);
+    const cg = gs('gc:custom-games')||[];
+    setCustomGames(cg);
+    loadScores([...BUILT_IN_GAMES,...cg]);
+    setScreen('hub');
+    setLoading(false);
+  }
+
+  return (
+    <div className="screen" style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:20,background:'radial-gradient(ellipse at center,#0d0d2a 0%,#07070f 70%)'}}>
+      <div style={{position:'fixed',inset:0,overflow:'hidden',pointerEvents:'none'}}>
+        {[...Array(5)].map((_,i)=>(
+          <div key={i} style={{position:'absolute',borderRadius:'50%',width:280+i*80,height:280+i*80,border:`1px solid rgba(109,40,217,${.04+i*.01})`,top:'50%',left:'50%',transform:'translate(-50%,-50%)'}}/>
+        ))}
+      </div>
+      <div style={{maxWidth:380,width:'100%',textAlign:'center',position:'relative',zIndex:1}}>
+        <div style={{fontSize:52,marginBottom:10}}>🎮</div>
+        <h1 className="logo-font" style={{fontSize:24,fontWeight:900,margin:'0 0 4px',background:'linear-gradient(135deg,#a78bfa,#f472b6,#38bdf8)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundSize:'200%',animation:'shimmer 4s linear infinite'}}>
+          GAME CENTER
+        </h1>
+        <p style={{color:'rgba(255,255,255,.3)',margin:'0 0 28px',fontSize:12,letterSpacing:.06}}>INVITE ONLY · COMPETE · WIN</p>
+
+        <div className="card" style={{textAlign:'left'}}>
+          {step === 'email' && <>
+            <p style={{margin:'0 0 12px',color:'rgba(255,255,255,.45)',fontSize:13}}>Enter your Gmail address to continue</p>
+            <input className="inp" type="email" placeholder="you@gmail.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleEmail()} style={{marginBottom:12}}/>
+            {err && <p style={{color:'#f87171',fontSize:13,margin:'0 0 10px'}}>{err}</p>}
+            <button className="btn btn-purple btn-full" onClick={handleEmail} style={{padding:14,fontSize:15}}>CONTINUE →</button>
+          </>}
+
+          {step === 'password' && <>
+            <div style={{marginBottom:14}}>
+              <button onClick={()=>{setStep('email');setErr('');setPwd('');}} style={{background:'none',border:'none',color:'rgba(255,255,255,.4)',cursor:'pointer',fontSize:13,padding:0}}>← {email}</button>
+            </div>
+            <p style={{margin:'0 0 12px',color:'rgba(255,255,255,.45)',fontSize:13}}>Enter your password</p>
+            <input className="inp" type="password" placeholder="Password" value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} style={{marginBottom:12}}/>
+            {err && <p style={{color:'#f87171',fontSize:13,margin:'0 0 10px'}}>{err}</p>}
+            <button className="btn btn-purple btn-full" onClick={handleLogin} disabled={loading} style={{padding:14,fontSize:15}}>{loading?'CHECKING…':'SIGN IN →'}</button>
+          </>}
+
+          {step === 'create' && <>
+            <div style={{marginBottom:14}}>
+              <button onClick={()=>{setStep('email');setErr('');setPwd('');setPwd2('');}} style={{background:'none',border:'none',color:'rgba(255,255,255,.4)',cursor:'pointer',fontSize:13,padding:0}}>← {email}</button>
+            </div>
+            <p style={{margin:'0 0 4px',fontSize:15,fontWeight:600}}>Welcome! 🎉</p>
+            <p style={{margin:'0 0 14px',color:'rgba(255,255,255,.4)',fontSize:13}}>{email === FOUNDER_EMAIL ? "You're the founding member. Create your password." : "You've been invited! Create your password."}</p>
+            <input className="inp" type="password" placeholder="Create password (min 6 chars)" value={pwd} onChange={e=>setPwd(e.target.value)} style={{marginBottom:10}}/>
+            <input className="inp" type="password" placeholder="Confirm password" value={pwd2} onChange={e=>setPwd2(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleCreate()} style={{marginBottom:12}}/>
+            {err && <p style={{color:'#f87171',fontSize:13,margin:'0 0 10px'}}>{err}</p>}
+            <button className="btn btn-purple btn-full" onClick={handleCreate} disabled={loading} style={{padding:14,fontSize:15}}>{loading?'CREATING…':'CREATE & ENTER →'}</button>
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// HUB
+// ═══════════════════════════════════════════════════════
+function Hub({user, scores, allGames, customGames, onPlay, onBoard, onInvite, onUpload, onLogout}) {
+  return (
+    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
+      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div className="logo-font" style={{fontSize:15,fontWeight:700,color:'#a78bfa',letterSpacing:.08}}>GAME CENTER</div>
+          <div style={{fontSize:11,color:'rgba(255,255,255,.3)',marginTop:1}}>
+            👋 <span style={{color:'#f0f0ff',fontWeight:600}}>{user.displayName}</span>
+            {user.isAdmin && <span className="tag" style={{background:'rgba(167,139,250,.15)',color:'#a78bfa',marginLeft:6}}>ADMIN</span>}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:7}}>
+          <button className="btn btn-ghost" style={{padding:'8px 12px',fontSize:12}} onClick={onInvite}>👥 Invite</button>
+          <button className="btn btn-ghost" style={{padding:'8px 12px',fontSize:12}} onClick={onUpload}>⬆ Games</button>
+          <button className="btn btn-ghost" style={{padding:'8px 10px',fontSize:15}} onClick={onLogout} title="Sign out">⏏</button>
+        </div>
+      </div>
+
+      <div style={{padding:'18px 18px 0'}}>
+        <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.14,textTransform:'uppercase',marginBottom:13,fontFamily:"'Orbitron',monospace"}}>ARCADE</div>
+        <div style={{display:'flex',flexDirection:'column',gap:13}}>
+          {allGames.map(g => {
+            const top = (scores[g.id]||[])[0];
+            return (
+              <div key={g.id} className="card" style={{overflow:'hidden',position:'relative',borderColor:'rgba(255,255,255,.07)'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:g.bg||'linear-gradient(135deg,#7c3aed,#4f46e5)'}}/>
+                <div style={{position:'absolute',right:14,top:12,fontSize:48,opacity:.07,filter:'blur(1px)'}}>{g.emoji}</div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:13}}>
+                  <div>
+                    <div style={{fontSize:26,marginBottom:5}}>{g.emoji}</div>
+                    <h3 className="logo-font" style={{margin:'0 0 3px',fontSize:14,fontWeight:700,letterSpacing:.04}}>{g.name}</h3>
+                    <p style={{margin:0,fontSize:11,color:'rgba(255,255,255,.35)'}}>{g.description}</p>
+                  </div>
+                  {top ? (
+                    <div style={{textAlign:'right',flexShrink:0,maxWidth:96}}>
+                      <div style={{fontSize:9,color:'rgba(255,255,255,.3)',fontFamily:"'Orbitron',monospace",marginBottom:2}}>🏆 BEST</div>
+                      <div style={{fontSize:20,fontWeight:700,color:'#fbbf24',fontFamily:"'Orbitron',monospace"}}>{top.score}</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,.3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{top.displayName}</div>
+                    </div>
+                  ) : <div style={{fontSize:10,color:'rgba(255,255,255,.2)'}}>No scores yet</div>}
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button className="btn btn-full" style={{background:g.bg||'linear-gradient(135deg,#7c3aed,#4f46e5)',padding:11,fontSize:13,flex:1}} onClick={()=>onPlay(g)}>▶ PLAY</button>
+                  <button className="btn btn-ghost" style={{padding:'11px 15px',fontSize:17,flexShrink:0}} onClick={()=>onBoard(g)} title="Leaderboard">📊</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Hall of Fame */}
+        <div style={{marginTop:22}}>
+          <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.14,textTransform:'uppercase',marginBottom:11,fontFamily:"'Orbitron',monospace"}}>HALL OF FAME</div>
+          <div className="card" style={{padding:'12px 16px'}}>
+            {allGames.map(g=>{
+              const top=(scores[g.id]||[])[0];
+              if(!top)return null;
+              return (
+                <div key={g.id} style={{display:'flex',alignItems:'center',gap:10,padding:'5px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                  <span style={{fontSize:14}}>{g.emoji}</span>
+                  <span style={{fontSize:12,color:'rgba(255,255,255,.45)',flex:1}}>{g.name}</span>
+                  <span style={{fontSize:11,color:'rgba(255,255,255,.4)'}}>{top.displayName}</span>
+                  <span className="logo-font" style={{fontSize:13,fontWeight:700,color:'#fbbf24',marginLeft:6}}>{top.score}</span>
+                </div>
+              );
+            })}
+            {allGames.every(g=>!(scores[g.id]||[]).length)&&(
+              <p style={{margin:0,color:'rgba(255,255,255,.2)',fontSize:13,textAlign:'center',padding:'6px 0'}}>No records yet — play to be first! 🚀</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// LEADERBOARD
+// ═══════════════════════════════════════════════════════
+function BoardScreen({game, allGames, allScores, onPlay, onBack}) {
+  const [activeGame, setActiveGame] = useState(game);
+  const activeScores = allScores[activeGame?.id]||[];
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  if (!game) return null;
+  return (
+    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
+      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
+        <button className="btn btn-ghost" style={{padding:'7px 12px',fontSize:13}} onClick={onBack}>← Back</button>
+        <div className="logo-font" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.5)',letterSpacing:.08}}>LEADERBOARD</div>
+      </div>
+      <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,.07)',overflowX:'auto'}}>
+        {allGames.map(g=>(
+          <button key={g.id} className="btn" onClick={()=>setActiveGame(g)}
+            style={{background:'transparent',borderRadius:0,padding:'11px 16px',fontSize:12,color:activeGame?.id===g.id?'#fff':'rgba(255,255,255,.3)',borderBottom:`2px solid ${activeGame?.id===g.id?(g.accent||'#a78bfa'):'transparent'}`,whiteSpace:'nowrap'}}>
+            {g.emoji} {g.name}
+          </button>
+        ))}
+      </div>
+      <div style={{padding:18}}>
+        <div style={{textAlign:'center',padding:'20px 0 18px'}}>
+          <div style={{fontSize:48,marginBottom:8}}>{activeGame?.emoji}</div>
+          <h2 className="logo-font" style={{margin:'0 0 3px',fontSize:16,fontWeight:700,color:activeGame?.accent||'#a78bfa'}}>{activeGame?.name}</h2>
+          <p style={{margin:'0 0 18px',fontSize:11,color:'rgba(255,255,255,.3)'}}>{activeGame?.description}</p>
+          <button className="btn" style={{background:activeGame?.bg||'linear-gradient(135deg,#7c3aed,#4f46e5)',padding:'10px 22px',fontSize:12}} onClick={()=>onPlay(activeGame)}>▶ PLAY NOW</button>
+        </div>
+        {activeScores.length===0 ? (
+          <div className="card" style={{textAlign:'center',color:'rgba(255,255,255,.2)',padding:28,fontSize:13}}>No scores yet — be first! 🚀</div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:9}}>
+            {activeScores.map((s,i)=>(
+              <div key={i} className="card" style={{display:'flex',alignItems:'center',gap:13,padding:'13px 15px',background:i===0?'rgba(251,191,36,.07)':'rgba(255,255,255,.04)',border:`1px solid ${i===0?'rgba(251,191,36,.3)':'rgba(255,255,255,.07)'}`,animation:`slideUp .25s ease-out ${i*.07}s both`}}>
+                <span style={{fontSize:22,minWidth:30}}>{medals[i]}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.displayName}</div>
+                  <div style={{fontSize:10,color:'rgba(255,255,255,.3)'}}>{s.email}</div>
+                </div>
+                <div className="logo-font" style={{fontSize:20,fontWeight:700,color:'#fbbf24'}}>{s.score}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// INVITE
+// ═══════════════════════════════════════════════════════
+function InviteScreen({user, onBack}) {
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [invites, setInvites] = useState(gs('gc:invites')||[]);
+  const mine = invites.filter(i=>i.by===user.email);
+
+  function send() {
+    const e = email.trim().toLowerCase();
+    if (!e.endsWith('@gmail.com')) { setMsg({ok:false,error:'Only Gmail addresses supported.'}); return; }
+    const users = gs('gc:users')||[];
+    const invites = gs('gc:invites')||[];
+    if (users.find(u=>u.email===e)) { setMsg({ok:false,error:'Already a member!'}); return; }
+    if (invites.find(i=>i.email===e&&i.status==='pending')) { setMsg({ok:false,error:'Already invited!'}); return; }
+    ss('gc:invites',[...invites,{email:e,by:user.email,byName:user.displayName,at:Date.now(),status:'pending'}]);
+    setMsg({ok:true, sentTo:e}); setEmail(''); setInvites(gs('gc:invites')||[]);
+  }
+
+  return (
+    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
+      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
+        <button className="btn btn-ghost" style={{padding:'7px 12px',fontSize:13}} onClick={onBack}>← Back</button>
+        <div className="logo-font" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.5)',letterSpacing:.08}}>INVITE FRIENDS</div>
+      </div>
+      <div style={{padding:18}}>
+        <p style={{color:'rgba(255,255,255,.35)',fontSize:13,marginBottom:18}}>Game Center is invite-only. Invite a friend with their Gmail address. They will need to visit this page and enter their email to create a password.</p>
+        <div className="card" style={{marginBottom:18}}>
+          <label style={{display:'block',fontSize:10,color:'rgba(255,255,255,.35)',letterSpacing:.12,marginBottom:10,fontFamily:"'Orbitron',monospace"}}>GMAIL ADDRESS</label>
+          <input className="inp" type="email" placeholder="friend@gmail.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} style={{marginBottom:12}}/>
+          {msg&&<p style={{fontSize:13,margin:'0 0 10px',color:msg.ok?'#4ade80':'#f87171'}}>{msg.ok?`✅ Invite sent to ${msg.sentTo}!`:`❌ ${msg.error}`}</p>}
+          <button className="btn btn-purple btn-full" onClick={send} style={{padding:12,fontSize:14}}>SEND INVITE →</button>
+        </div>
+        {mine.length>0&&(
+          <>
+            <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.12,textTransform:'uppercase',marginBottom:11,fontFamily:"'Orbitron',monospace"}}>YOUR INVITES</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {mine.map((inv,i)=>(
+                <div key={i} className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 14px'}}>
+                  <span style={{fontSize:13,color:'rgba(255,255,255,.65)'}}>{inv.email}</span>
+                  <span className="tag" style={{background:inv.status==='accepted'?'rgba(74,222,128,.12)':'rgba(255,255,255,.06)',color:inv.status==='accepted'?'#4ade80':'rgba(255,255,255,.4)'}}>{inv.status.toUpperCase()}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// UPLOAD GAMES
+// ═══════════════════════════════════════════════════════
+function UploadScreen({user, onUpload, customGames, onDelete, onBack}) {
+  const [dragging, setDragging] = useState(false);
+  const [status, setStatus] = useState(null);
+  const fileRef = useRef(null);
+
+  function processFile(file) {
+    if (!file.name.endsWith('.html')) { setStatus({ok:false,error:'Only .html files are supported.'}); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const html = e.target.result;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html,'text/html');
+      const name = doc.querySelector('meta[name="game-name"]')?.content || file.name.replace('.html','');
+      const emoji = doc.querySelector('meta[name="game-emoji"]')?.content || '🎮';
+      const description = doc.querySelector('meta[name="game-description"]')?.content || 'A custom game';
+      const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,30) + '-' + Date.now().toString(36);
+      onUpload({ id, name, emoji, description, html, bg:'linear-gradient(135deg,#0f766e,#0d9488)', accent:'#2dd4bf', builtin:false });
+      setStatus({ok:true, name});
+    };
+    reader.readAsText(file);
+  }
+
+  function onFileChange(e) { if (e.target.files[0]) processFile(e.target.files[0]); }
+
+  function onDrop(e) {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }
+
+  return (
+    <div className="screen" style={{minHeight:'100vh',background:'#07070f',paddingBottom:40}}>
+      <div style={{background:'rgba(255,255,255,.03)',borderBottom:'1px solid rgba(255,255,255,.07)',padding:'14px 18px',display:'flex',alignItems:'center',gap:12}}>
+        <button className="btn btn-ghost" style={{padding:'7px 12px',fontSize:13}} onClick={onBack}>← Back</button>
+        <div className="logo-font" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.5)',letterSpacing:.08}}>MANAGE GAMES</div>
+      </div>
+      <div style={{padding:18}}>
+        <p style={{color:'rgba(255,255,255,.35)',fontSize:13,marginBottom:18}}>Upload a compatible HTML game file. Games must include a <code style={{background:'rgba(255,255,255,.08)',padding:'1px 5px',borderRadius:4,fontSize:11}}>window.parent.postMessage</code> score call when the game ends.</p>
+
+        {/* Drop zone */}
+        <div
+          onDragOver={e=>{e.preventDefault();setDragging(true)}}
+          onDragLeave={()=>setDragging(false)}
+          onDrop={onDrop}
+          onClick={()=>fileRef.current.click()}
+          style={{border:`2px dashed ${dragging?'#a78bfa':'rgba(255,255,255,.15)'}`,borderRadius:14,padding:'32px 20px',textAlign:'center',cursor:'pointer',marginBottom:18,transition:'border-color .2s',background:dragging?'rgba(167,139,250,.06)':'transparent'}}>
+          <div style={{fontSize:36,marginBottom:10}}>📁</div>
+          <div style={{fontWeight:600,fontSize:15,marginBottom:4}}>{dragging?'Drop it!':'Drag & drop your game here'}</div>
+          <div style={{color:'rgba(255,255,255,.35)',fontSize:13}}>or click to browse — .html files only</div>
+          <input ref={fileRef} type="file" accept=".html" onChange={onFileChange} style={{display:'none'}}/>
+        </div>
+
+        {status && (
+          <div style={{padding:'12px 16px',borderRadius:11,marginBottom:18,background:status.ok?'rgba(74,222,128,.1)':'rgba(248,113,113,.1)',border:`1px solid ${status.ok?'rgba(74,222,128,.3)':'rgba(248,113,113,.3)'}`,color:status.ok?'#4ade80':'#f87171',fontSize:13}}>
+            {status.ok ? `✅ "${status.name}" uploaded and added to the arcade!` : `❌ ${status.error}`}
+          </div>
+        )}
+
+        {/* Custom games list */}
+        {customGames.length > 0 && (
+          <>
+            <div style={{fontSize:10,color:'rgba(255,255,255,.3)',letterSpacing:.12,textTransform:'uppercase',marginBottom:11,fontFamily:"'Orbitron',monospace"}}>UPLOADED GAMES</div>
+            <div style={{display:'flex',flexDirection:'column',gap:9}}>
+              {customGames.map(g=>(
+                <div key={g.id} className="card" style={{display:'flex',alignItems:'center',gap:12,padding:'12px 15px'}}>
+                  <span style={{fontSize:22}}>{g.emoji}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14}}>{g.name}</div>
+                    <div style={{fontSize:11,color:'rgba(255,255,255,.3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.description}</div>
+                  </div>
+                  <button className="btn btn-red" style={{padding:'7px 11px',fontSize:12,flexShrink:0}} onClick={()=>onDelete(g.id)}>🗑</button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Hint box */}
+        <div className="card" style={{marginTop:20,background:'rgba(167,139,250,.06)',border:'1px solid rgba(167,139,250,.15)'}}>
+          <div style={{fontSize:11,color:'#a78bfa',fontWeight:600,marginBottom:8,fontFamily:"'Orbitron',monospace",letterSpacing:.08}}>💡 HOW TO CREATE A GAME</div>
+          <p style={{fontSize:12,color:'rgba(255,255,255,.45)',lineHeight:1.6,margin:0}}>
+            Ask any AI assistant to build you a game. Include these requirements in your prompt:
+            <br/><br/>
+            <span style={{color:'rgba(255,255,255,.6)'}}>1.</span> Single standalone HTML file<br/>
+            <span style={{color:'rgba(255,255,255,.6)'}}>2.</span> Mobile-first design<br/>
+            <span style={{color:'rgba(255,255,255,.6)'}}>3.</span> Add these meta tags: <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>game-name</code>, <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>game-emoji</code>, <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>game-description</code><br/>
+            <span style={{color:'rgba(255,255,255,.6)'}}>4.</span> When game ends, call: <code style={{fontSize:10,background:'rgba(0,0,0,.3)',padding:'1px 4px',borderRadius:3}}>window.parent.postMessage({'{'}"type":"GAME_OVER","score":N{'}'},'*')</code><br/><br/>
+            See the included <strong>GAME_README.md</strong> file for full prompting templates.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>, document.getElementById('root'));
+</script>
+</body>
+</html>
