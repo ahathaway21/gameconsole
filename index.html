@@ -168,7 +168,7 @@ function ghReadGameFile(id){
 }
 
 // Build the canonical data object from localStorage
-// Note: game HTML is stored separately in gc-games/{id}.html — only metadata goes here
+// Note: game HTML stored separately in gc-games/{id}.html; token NEVER written to repo
 function buildGhData(){
   var scores={};
   for(var i=0;i<localStorage.length;i++){
@@ -179,19 +179,23 @@ function buildGhData(){
   var cgMeta=(gsGet('gc:custom-games')||[]).map(function(g){
     return {id:g.id,name:g.name,emoji:g.emoji,description:g.description,bg:g.bg,accent:g.accent};
   });
-  // Embed full GH config (including token) so all users can push games/scores
+  // Store owner+repo only — token stays in localStorage, never in the repo
   var ghConf=gsGet('gc:gh-config')||{};
   return {version:3,updatedAt:Date.now(),users:gsGet('gc:users')||[],
           invites:gsGet('gc:invites')||[],scores:scores,customGamesMeta:cgMeta,
-          ghConfig:{owner:ghConf.owner||'',repo:ghConf.repo||'',token:ghConf.token||''}};
+          ghConfig:{owner:ghConf.owner||'',repo:ghConf.repo||''}};
 }
 
 // Apply data from GitHub into localStorage
 function applyGhData(d){
   if(!d) return;
-  // Propagate GitHub config to all users — lets any user upload games and sync scores
-  if(d.ghConfig&&d.ghConfig.owner&&d.ghConfig.repo&&d.ghConfig.token){
-    if(!GH.configured()) GH.save(d.ghConfig.owner,d.ghConfig.repo,d.ghConfig.token);
+  // Apply owner+repo from gc-data.json so new devices know where to look
+  // Token is NOT in gc-data.json — users get it via invite link or admin setup
+  if(d.ghConfig&&d.ghConfig.owner&&d.ghConfig.repo){
+    var existing=gsGet('gc:gh-config')||{};
+    // Only update owner/repo — preserve any token already stored locally
+    gsSet('gc:gh-config',{owner:d.ghConfig.owner,repo:d.ghConfig.repo,token:existing.token||''});
+    GH.load();
   }
   // Only apply users if GitHub has actual data — never overwrite local with empty
   if(d.users && d.users.length > 0){
