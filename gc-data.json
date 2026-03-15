@@ -1,1 +1,21 @@
-{"version":3,"updatedAt":0,"users":[],"invites":[],"scores":{},"customGamesMeta":[],"ghConfig":{"owner":"ahathaway21","repo":"gameconsole"}}
+{
+  "version": 3,
+  "updatedAt": 1773597950977,
+  "users": [
+    {
+      "email": "ahathaway21@gmail.com",
+      "displayName": "ahathaway21",
+      "passwordHash": "d9f460155599817b369786f1c1cb0263784552375d9a2b37cf375cc34de57c76",
+      "isAdmin": true,
+      "joinedAt": 1773596784304,
+      "invitedBy": null
+    }
+  ],
+  "invites": [],
+  "scores": {},
+  "customGamesMeta": [],
+  "ghConfig": {
+    "owner": "ahathaway21",
+    "repo": "gameconsole"
+  }
+}
