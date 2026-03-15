@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updatedAt": 1773597957427,
+  "updatedAt": 1773597969253,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -13,7 +13,16 @@
   ],
   "invites": [],
   "scores": {},
-  "customGamesMeta": [],
+  "customGamesMeta": [
+    {
+      "id": "custom-cat-blast-mms2fr2j",
+      "name": "Cat Blast",
+      "emoji": "😺",
+      "description": "Drag cat-shaped blocks onto the board to fill rows and columns — hear the meows when you clear lines!",
+      "bg": "linear-gradient(135deg,#0f766e,#0d9488)",
+      "accent": "#2dd4bf"
+    }
+  ],
   "ghConfig": {
     "owner": "ahathaway21",
     "repo": "gameconsole"
