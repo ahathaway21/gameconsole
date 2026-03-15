@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773602370708,
+  "updatedAt": 1773602382756,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -53,22 +53,10 @@
   "scores": {
     "custom-cat-blast-mms2fr2j": [
       {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 3280,
-        "date": 1773601798465
-      },
-      {
         "email": "mary.hathaway@gmail.com",
         "displayName": "mary.hathaway",
         "score": 2860,
         "date": 1773600086256
-      },
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 2800,
-        "date": 1773602370707
       },
       {
         "email": "hathawaynoaha@gmail.com",
@@ -87,18 +75,6 @@
         "displayName": "hathawaynoaha",
         "score": 2300,
         "date": 1773601700915
-      },
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 1710,
-        "date": 1773601609377
-      },
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 1510,
-        "date": 1773601660711
       },
       {
         "email": "hathawaynoaha@gmail.com",
@@ -145,20 +121,8 @@
       {
         "email": "ahathaway21@gmail.com",
         "displayName": "ahathaway21",
-        "score": 790,
-        "date": 1773602277607
-      },
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
         "score": 770,
         "date": 1773598556541
-      },
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 540,
-        "date": 1773601564384
       },
       {
         "email": "ahathaway21@gmail.com",
