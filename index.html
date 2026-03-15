@@ -235,10 +235,23 @@ function applyGhData(d){
     });
     gsSet('gc:invites', mergedInv);
   }
-  // Scores: merge all, GitHub wins on conflicts
+  // Scores: merge local + GitHub, keeping ALL entries from both, no overwrites
   if(d.scores){
     Object.keys(d.scores).forEach(function(gid){
-      if(d.scores[gid] && d.scores[gid].length) gsSet('gc:scores:'+gid, d.scores[gid]);
+      var ghScores=d.scores[gid];
+      if(!ghScores||!ghScores.length) return;
+      var local=gsGet('gc:scores:'+gid)||[];
+      // Combine all entries — use date+email+score as a dedup key
+      var seen={};
+      var combined=local.concat(ghScores).filter(function(s){
+        var key=s.email+'|'+s.score+'|'+(s.date||0);
+        if(seen[key]) return false;
+        seen[key]=true;
+        return true;
+      });
+      // Sort descending and keep top 100 to prevent unbounded growth
+      combined.sort(function(a,b){return b.score-a.score;});
+      gsSet('gc:scores:'+gid, combined.slice(0,100));
     });
   }
   // Custom games — full data including HTML embedded in gc-data.json
@@ -383,14 +396,19 @@ function loadScores(){
 function submitScore(gameId,pts){
   var raw=gsGet('gc:scores:'+gameId)||[];
   var entry={email:S.user.email,displayName:S.user.displayName,score:pts,date:Date.now()};
+  // Add new entry and keep all scores (not sliced — buildGhData sends all to GitHub)
   var updated=raw.concat([entry]);
-  gsSet('gc:scores:'+gameId,updated);
-  var top5=updated.sort(function(a,b){return b.score-a.score;}).slice(0,5);
+  updated.sort(function(a,b){return b.score-a.score;});
+  gsSet('gc:scores:'+gameId,updated.slice(0,100)); // keep top 100 max
+  var top5=updated.slice(0,5);
   var rank=-1;
   top5.forEach(function(s,i){ if(s.email===S.user.email&&s.score===pts) rank=i+1; });
   S.scores[gameId]=top5;
-  syncToGH();
-  return {top5:top5,rank:rank};
+  // Push score to GitHub — works for token holders; others need a Sync
+  if(GH.configured()){
+    ghWrite(buildGhData());
+  }
+  return {top5:top5,rank:rank,needsSync:!GH.configured()};
 }
 
 /* ================================================================
@@ -543,28 +561,34 @@ function doEmailNext(){
   var e=(el?el.value:LS.email).trim().toLowerCase();
   LS.email=e;
   if(!e.includes('@gmail.com')){ LS.err='Please enter a valid Gmail address.'; renderLogin(document.getElementById('app')); return; }
-  var users=gsGet('gc:users')||[];
-  var invites=gsGet('gc:invites')||[];
-  if(users.find(function(u){return u.email===e;})){ LS.step='password'; LS.err=''; }
-  else if(e===FOUNDER_EMAIL&&users.length===0){ LS.step='create'; LS.err=''; }
-  else if(invites.find(function(i){return i.email===e&&i.status==='pending';})){ LS.step='create'; LS.err=''; }
-  else{ LS.err='Access denied. This Game Center is invite-only.'; }
-  renderLogin(document.getElementById('app'));
+  // Pull latest from GitHub before checking so we always have up-to-date users/invites
+  syncFromGH().then(function(){
+    var users=gsGet('gc:users')||[];
+    var invites=gsGet('gc:invites')||[];
+    if(users.find(function(u){return u.email===e;})){ LS.step='password'; LS.err=''; }
+    else if(e===FOUNDER_EMAIL&&users.length===0){ LS.step='create'; LS.err=''; }
+    else if(invites.find(function(i){return i.email===e&&i.status==='pending';})){ LS.step='create'; LS.err=''; }
+    else{ LS.err='Access denied. This Game Center is invite-only.'; }
+    renderLogin(document.getElementById('app'));
+  });
 }
 
 function doSignIn(){
   var pwdEl=document.getElementById('li-pwd');
   if(!pwdEl) return;
   var pwd=pwdEl.value;
-  var users=gsGet('gc:users')||[];
-  var u=users.find(function(x){return x.email===LS.email;});
-  if(!u){ LS.err='User not found.'; renderLogin(document.getElementById('app')); return; }
-  hashPwd(pwd).then(function(hash){
-    if(hash!==u.passwordHash){ LS.err='Incorrect password.'; renderLogin(document.getElementById('app')); return; }
-    localStorage.setItem('gc:me',u.email);
-    S.user=u; S.customGames=gsGet('gc:custom-games')||[]; loadScores();
-    LS={step:'email',email:'',err:''};
-    go('hub');
+  // Pull latest from GitHub so password hash is always current
+  syncFromGH().then(function(){
+    var users=gsGet('gc:users')||[];
+    var u=users.find(function(x){return x.email===LS.email;});
+    if(!u){ LS.err='User not found.'; renderLogin(document.getElementById('app')); return; }
+    hashPwd(pwd).then(function(hash){
+      if(hash!==u.passwordHash){ LS.err='Incorrect password.'; renderLogin(document.getElementById('app')); return; }
+      localStorage.setItem('gc:me',u.email);
+      S.user=u; S.customGames=gsGet('gc:custom-games')||[]; loadScores();
+      LS={step:'email',email:'',err:''};
+      go('hub');
+    });
   });
 }
 
@@ -586,7 +610,9 @@ function doCreate(){
     gsSet('gc:invites',newInvites);
     localStorage.setItem('gc:me',e);
     S.user=u; S.customGames=gsGet('gc:custom-games')||[]; loadScores();
-    syncToGH();
+    // fullSync: if we have a token this pushes the new account to GitHub immediately
+    // if not, at least we pull the latest data so others see this user next time admin syncs
+    fullSync();
     LS={step:'email',email:'',err:''};
     go('hub');
   });
@@ -1244,11 +1270,11 @@ document.getElementById('game-back-btn').addEventListener('click',closeGameOverl
 window.addEventListener('message',function(e){
   if(e.data&&e.data.type==='GAME_OVER'&&_currentGame&&S.user){
     var result=submitScore(_currentGame.id,e.data.score);
-    showScorePanel(_currentGame,e.data.score,result.top5,result.rank);
+    showScorePanel(_currentGame,e.data.score,result.top5,result.rank,result.needsSync);
   }
 });
 
-function showScorePanel(game,pts,top5,rank){
+function showScorePanel(game,pts,top5,rank,needsSync){
   var medalText=['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49','4\uFE0F\u20E3','5\uFE0F\u20E3'];
   var rankLabels=['\uD83E\uDD47 #1 on the leaderboard!','\uD83E\uDD48 #2 on the leaderboard!','\uD83E\uDD49 #3 on the leaderboard!','4th place!','5th place!'];
   document.getElementById('sp-emoji').textContent=pts>=500?'\uD83C\uDFC6':pts>=200?'\uD83C\uDF89':'\uD83D\uDCAA';
@@ -1263,9 +1289,32 @@ function showScorePanel(game,pts,top5,rank){
       +'<span style="font-family:Orbitron,monospace;font-weight:700;color:#fbbf24;font-size:15px">'+s.score+'</span>'
     +'</div>';
   }).join('');
+  // Show sync nudge if user has no token — their score is only local until synced
+  var syncNudge='';
+  if(needsSync){
+    syncNudge='<div id="sp-sync-nudge" style="width:100%;max-width:360px;margin-top:12px;padding:11px 14px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:11px;display:flex;align-items:center;gap:10px">'
+      +'<span style="font-size:18px">&#9889;</span>'
+      +'<span style="flex:1;font-size:12px;color:rgba(255,255,255,.6);line-height:1.5">Tap <strong style="color:#fbbf24">Sync Score</strong> so your result appears on the leaderboard for everyone.</span>'
+      +'<button id="sp-sync-score-btn" class="btn btn-ghost" style="padding:8px 12px;font-size:12px;flex-shrink:0;color:#fbbf24;border-color:rgba(251,191,36,.3)">&#8635; Sync Score</button>'
+    +'</div>';
+  }
+  var lbEl=document.getElementById('sp-leaderboard');
+  lbEl.insertAdjacentHTML('afterend',syncNudge);
   document.getElementById('score-panel').classList.add('active');
   document.getElementById('sp-back').onclick=function(){ closeGameOverlay(); };
   document.getElementById('sp-again').onclick=function(){ document.getElementById('score-panel').classList.remove('active'); document.getElementById('game-iframe').src=_currentBlobUrl; };
+  // Wire sync score button
+  var syncBtn=document.getElementById('sp-sync-score-btn');
+  if(syncBtn){
+    syncBtn.addEventListener('click',function(){
+      syncBtn.textContent='Syncing...'; syncBtn.disabled=true;
+      fullSync().then(function(){
+        loadScores();
+        var nudge=document.getElementById('sp-sync-nudge');
+        if(nudge) nudge.innerHTML='<span style="font-size:14px;color:#4ade80">&#10003; Score synced!</span>';
+      });
+    });
+  }
 }
 
 /* ================================================================
