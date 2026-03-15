@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773600199300,
+  "updatedAt": 1773600202722,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -16,14 +16,6 @@
       "passwordHash": "fcd0b0347fba888493402ea8c5262bdeb899fd8eaaab9d3ee76e13c0c103dcd1",
       "isAdmin": false,
       "joinedAt": 1773599902619,
-      "invitedBy": "ahathaway21@gmail.com"
-    },
-    {
-      "email": "hathawaynoaha@gmail.com",
-      "displayName": "hathawaynoaha",
-      "passwordHash": "9a7d9e7b18d9572adcbbe6a3816ae1cff471947108738fd0d31c178680274546",
-      "isAdmin": false,
-      "joinedAt": 1773598118254,
       "invitedBy": "ahathaway21@gmail.com"
     }
   ],
@@ -41,6 +33,13 @@
       "byName": "ahathaway21",
       "at": 1773599807397,
       "status": "accepted"
+    },
+    {
+      "email": "thehathawayluke@gmail.com",
+      "by": "ahathaway21@gmail.com",
+      "byName": "ahathaway21",
+      "at": 1773599954558,
+      "status": "pending"
     }
   ],
   "scores": {
@@ -89,7 +88,7 @@
     },
     {
       "id": "custom-f1-family-betting-mms2k4cr",
-      "name": "f1-family-betting",
+      "name": "custom-f1-family-betting-mms2k4cr",
       "emoji": "🎮",
       "description": "A custom game",
       "bg": "linear-gradient(135deg,#0f766e,#0d9488)",
