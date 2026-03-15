@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Game Center</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+body{background:#07070f;color:#f0f0ff;font-family:'Syne',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:4px;background:#0d0d1a}
+::-webkit-scrollbar-thumb{background:#6d28d9;border-radius:2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes slideUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
+@keyframes popIn{0%{transform:scale(.8);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}
+.screen{animation:slideUp .3s ease-out}
+.card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:18px}
+.btn{border:none;border-radius:11px;padding:13px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:transform .12s,filter .12s;color:#fff}
+.btn:active{transform:scale(.96)}
+.btn:hover{filter:brightness(1.1)}
+.btn-ghost{background:rgba(255,255,255,.07);color:#f0f0ff}
+.btn-purple{background:linear-gradient(135deg,#7c3aed,#5b21b6)}
+.btn-full{width:100%}
+.inp{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:13px 16px;color:#f0f0ff;font-size:15px;outline:none;font-family:'Syne',sans-serif;transition:border-color .2s}
+.inp:focus{border-color:rgba(167,139,250,.6)}
+.logo-font{font-family:'Orbitron',monospace;letter-spacing:.05em}
+.tag{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.05em}
+.neon-text{color:#a78bfa;text-shadow:0 0 8px rgba(167,139,250,.6)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ── Storage (localStorage for standalone) ──────────────────────
+const gs = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+const ss = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { console.warn('storage', e); } };
+
+// ── API Key Management ─────────────────────────────────────────
+const getApiKey = () => localStorage.getItem("gc:apikey") || "";
+const setApiKey = k => localStorage.setItem("gc:apikey", k);
+
+// ── Claude API ─────────────────────────────────────────────────
+async function ai(prompt) {
+  const key = getApiKey();
+  if (!key) throw new Error("NO_KEY");
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1200,
+      system: "You are a game content generator. Respond ONLY with valid JSON. No markdown, no explanation, no code fences.",
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  if (!r.ok) {
+    const err = await r.json();
+    throw new Error(err.error?.message || "API error");
+  }
+  const d = await r.json();
+  const t = d.content[0].text.trim().replace(/^```json\s*|^```\s*|\s*```$/g, "").trim();
+  return JSON.parse(t);
+}
+
+// ── GAMES REGISTRY — add new games here! ──────────────────────
+const GAMES = [
+  { id: "trivia",    name: "AI Trivia",     emoji: "🧠", bg: "linear-gradient(135deg,#4f46e5,#7c3aed)", accent: "#a78bfa", tagline: "5 questions · 15 sec each · 100 pts max" },
+  { id: "riddles",   name: "Riddle Rush",   emoji: "🔮", bg: "linear-gradient(135deg,#be185d,#9d174d)", accent: "#f472b6", tagline: "5 riddles · 20 sec each · 100 pts max" },
+  { id: "truefalse", name: "True or False", emoji: "⚡", bg: "linear-gradient(135deg,#0369a1,#0284c7)", accent: "#38bdf8", tagline: "8 rounds · 10 sec each · 75 pts max" },
+];
+
+// ── Root ───────────────────────────────────────────────────────
+function App() {
+  const [screen, setScreen] = useState("boot");
+  const [user, setUser] = useState(null);
+  const [scores, setScores] = useState({});
+  const [game, setGame] = useState(null);
+  const [apiKey, setApiKeyState] = useState(getApiKey());
+
+  useEffect(() => { init(); }, []);
+
+  function init() {
+    const email = localStorage.getItem("gc:me");
+    const allUsers = gs("gc:users") || [];
+    if (email) {
+      const u = allUsers.find(x => x.email === email);
+      if (u) { setUser(u); loadScores(); setScreen(getApiKey() ? "hub" : "apikey"); return; }
+    }
+    setScreen("login");
+  }
+
+  function loadScores() {
+    const s = {};
+    for (const g of GAMES) {
+      const raw = gs(`gc:scores:${g.id}`) || [];
+      s[g.id] = raw.sort((a, b) => b.score - a.score).slice(0, 5);
+    }
+    setScores(s);
+  }
+
+  function login(email) {
+    const allUsers = gs("gc:users") || [];
+    const found = allUsers.find(u => u.email === email);
+    if (found) {
+      localStorage.setItem("gc:me", email);
+      setUser(found); loadScores();
+      setScreen(getApiKey() ? "hub" : "apikey");
+      return { ok: true };
+    }
+    if (allUsers.length === 0) {
+      const u = { email, displayName: email.split("@")[0], isAdmin: true, joinedAt: Date.now(), invitedBy: null };
+      ss("gc:users", [u]);
+      localStorage.setItem("gc:me", email);
+      setUser(u); loadScores();
+      setScreen(getApiKey() ? "hub" : "apikey");
+      return { ok: true, founder: true };
+    }
+    const allInvites = gs("gc:invites") || [];
+    const inv = allInvites.find(i => i.email === email && i.status === "pending");
+    if (inv) {
+      const u = { email, displayName: email.split("@")[0], isAdmin: false, joinedAt: Date.now(), invitedBy: inv.by };
+      const newUsers = [...allUsers, u];
+      const newInvites = allInvites.map(i => i.email === email ? { ...i, status: "accepted" } : i);
+      ss("gc:users", newUsers); ss("gc:invites", newInvites);
+      localStorage.setItem("gc:me", email);
+      setUser(u); loadScores();
+      setScreen(getApiKey() ? "hub" : "apikey");
+      return { ok: true };
+    }
+    return { ok: false, error: "No invite found. Ask a member to invite you!" };
+  }
+
+  function saveApiKey(k) {
+    setApiKey(k); setApiKeyState(k);
+    setScreen("hub");
+  }
+
+  function sendInvite(email) {
+    if (!email.endsWith("@gmail.com")) return { ok: false, error: "Only Gmail addresses supported." };
+    const allUsers = gs("gc:users") || [];
+    const allInvites = gs("gc:invites") || [];
+    if (allUsers.find(u => u.email === email)) return { ok: false, error: "Already a member!" };
+    if (allInvites.find(i => i.email === email && i.status === "pending")) return { ok: false, error: "Already invited!" };
+    const inv = { email, by: user.email, byName: user.displayName, at: Date.now(), status: "pending" };
+    ss("gc:invites", [...allInvites, inv]);
+    return { ok: true };
+  }
+
+  function submitScore(gameId, pts) {
+    const raw = gs(`gc:scores:${gameId}`) || [];
+    const entry = { email: user.email, displayName: user.displayName, score: pts, date: Date.now() };
+    const updated = [...raw, entry];
+    ss(`gc:scores:${gameId}`, updated);
+    const top5 = updated.sort((a, b) => b.score - a.score).slice(0, 5);
+    setScores(prev => ({ ...prev, [gameId]: top5 }));
+    return top5;
+  }
+
+  function logout() { localStorage.removeItem("gc:me"); setUser(null); setScreen("login"); }
+  function play(g) { setGame(g); setScreen("game"); }
+  function board(g) { setGame(g); setScreen("board"); }
+  function goHub() { loadScores(); setScreen("hub"); }
+
+  if (screen === "boot") return <Boot />;
+  if (screen === "login") return <Login onLogin={login} />;
+  if (screen === "apikey") return <ApiKeyScreen onSave={saveApiKey} existing={apiKey} />;
+  if (screen === "hub") return <Hub user={user} scores={scores} onPlay={play} onBoard={board} onInvite={() => setScreen("invite")} onApiKey={() => setScreen("apikey")} onLogout={logout} />;
+  if (screen === "invite") return <InviteScreen user={user} onInvite={sendInvite} onBack={() => setScreen("hub")} />;
+  if (screen === "board") return <BoardScreen game={game} scores={scores[game?.id] || []} allScores={scores} user={user} onPlay={play} onBack={() => setScreen("hub")} />;
+  if (screen === "game") return <GameWrapper game={game} user={user} onScore={submitScore} onBack={goHub} />;
+  return null;
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+function Boot() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 16 }}>
+      <div className="logo-font neon-text" style={{ fontSize: 24, fontWeight: 900 }}>GAME CENTER</div>
+      <div style={{ width: 36, height: 36, border: "3px solid rgba(167,139,250,.2)", borderTop: "3px solid #a78bfa", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+    </div>
+  );
+}
+
+// ── API Key Screen ────────────────────────────────────────────
+function ApiKeyScreen({ onSave, existing }) {
+  const [key, setKey] = useState(existing || "");
+  const [err, setErr] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  async function save() {
+    const k = key.trim();
+    if (!k.startsWith("sk-ant-")) { setErr("Key should start with sk-ant-"); return; }
+    setTesting(true); setErr("");
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": k, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 10, messages: [{ role: "user", content: "hi" }] })
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || "Invalid key"); }
+      onSave(k);
+    } catch (e) { setErr("Key invalid or request failed: " + e.message); }
+    setTesting(false);
+  }
+
+  return (
+    <div className="screen" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "radial-gradient(ellipse at center,#0d0d2a 0%,#07070f 70%)" }}>
+      <div style={{ maxWidth: 380, width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🔑</div>
+          <h2 className="logo-font" style={{ fontSize: 18, fontWeight: 700, color: "#a78bfa", marginBottom: 8 }}>ANTHROPIC API KEY</h2>
+          <p style={{ color: "rgba(255,255,255,.4)", fontSize: 13, lineHeight: 1.6 }}>
+            Games use AI to generate questions. Enter your API key to enable them.<br />
+            <a href="https://console.anthropic.com" target="_blank" style={{ color: "#a78bfa" }}>Get a free key → console.anthropic.com</a>
+          </p>
+        </div>
+        <div className="card">
+          <input className="inp" type="password" placeholder="sk-ant-api03-..." value={key} onChange={e => setKey(e.target.value)} onKeyDown={e => e.key === "Enter" && save()} style={{ marginBottom: 12 }} />
+          {err && <p style={{ color: "#f87171", fontSize: 13, marginBottom: 10 }}>{err}</p>}
+          <button className="btn btn-purple btn-full" onClick={save} disabled={testing} style={{ padding: 14, fontSize: 15 }}>
+            {testing ? "VERIFYING…" : "SAVE & CONTINUE →"}
+          </button>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,.2)", textAlign: "center", marginTop: 12 }}>
+            Stored locally in your browser only. Never shared.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Login ─────────────────────────────────────────────────────
+function Login({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function go() {
+    const e = email.trim().toLowerCase();
+    if (!e.includes("@gmail.com")) { setErr("Please enter a valid Gmail address."); return; }
+    setLoading(true); setErr(""); setMsg("");
+    const r = onLogin(e);
+    if (!r.ok) setErr(r.error);
+    else if (r.founder) setMsg("🎮 You're the founding member!");
+    setLoading(false);
+  }
+
+  return (
+    <div className="screen" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "radial-gradient(ellipse at center,#0d0d2a 0%,#07070f 70%)" }}>
+      <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {[...Array(6)].map((_, i) => (
+          <div key={i} style={{ position: "absolute", borderRadius: "50%", width: 300 + i * 80, height: 300 + i * 80, border: `1px solid rgba(109,40,217,${.04 + i * .01})`, top: "50%", left: "50%", transform: "translate(-50%,-50%)" }} />
+        ))}
+      </div>
+      <div style={{ maxWidth: 380, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
+        <div style={{ fontSize: 56, marginBottom: 12 }}>🎮</div>
+        <h1 className="logo-font" style={{ fontSize: 26, fontWeight: 900, margin: "0 0 4px", background: "linear-gradient(135deg,#a78bfa,#f472b6,#38bdf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundSize: "200%", animation: "shimmer 4s linear infinite" }}>
+          GAME CENTER
+        </h1>
+        <p style={{ color: "rgba(255,255,255,.3)", margin: "0 0 32px", fontSize: 13, letterSpacing: .05 }}>INVITE ONLY · AI POWERED · COMPETE</p>
+        <div className="card" style={{ textAlign: "left" }}>
+          <p style={{ margin: "0 0 14px", color: "rgba(255,255,255,.5)", fontSize: 13 }}>Sign in with your Gmail to continue</p>
+          <input className="inp" type="email" placeholder="you@gmail.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && go()} style={{ marginBottom: 12 }} />
+          {err && <p style={{ color: "#f87171", fontSize: 13, margin: "0 0 10px" }}>{err}</p>}
+          {msg && <p style={{ color: "#4ade80", fontSize: 13, margin: "0 0 10px" }}>{msg}</p>}
+          <button className="btn btn-purple btn-full" onClick={go} disabled={loading} style={{ padding: 14, fontSize: 15 }}>
+            {loading ? "CHECKING…" : "ENTER GAME CENTER →"}
+          </button>
+          <p style={{ margin: "14px 0 0", color: "rgba(255,255,255,.2)", fontSize: 12, textAlign: "center" }}>Need access? Ask an existing member to invite you.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Hub ───────────────────────────────────────────────────────
+function Hub({ user, scores, onPlay, onBoard, onInvite, onApiKey, onLogout }) {
+  return (
+    <div className="screen" style={{ minHeight: "100vh", background: "#07070f", paddingBottom: 40 }}>
+      <div style={{ background: "rgba(255,255,255,.03)", borderBottom: "1px solid rgba(255,255,255,.07)", padding: "16px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div className="logo-font" style={{ fontSize: 16, fontWeight: 700, color: "#a78bfa", letterSpacing: .08 }}>GAME CENTER</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,.3)", marginTop: 2 }}>
+            Welcome, <span style={{ color: "#f0f0ff", fontWeight: 600 }}>{user.displayName}</span>
+            {user.isAdmin && <span className="tag" style={{ background: "rgba(167,139,250,.15)", color: "#a78bfa", marginLeft: 6 }}>ADMIN</span>}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" style={{ padding: "9px 14px", fontSize: 13 }} onClick={onInvite}>👥 Invite</button>
+          <button className="btn btn-ghost" style={{ padding: "9px 12px", fontSize: 13 }} onClick={onApiKey} title="API Key">🔑</button>
+          <button className="btn btn-ghost" style={{ padding: "9px 12px", fontSize: 16 }} onClick={onLogout} title="Logout">⏏</button>
+        </div>
+      </div>
+      <div style={{ padding: "20px 18px 0" }}>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: .12, textTransform: "uppercase", marginBottom: 14, fontFamily: "'Orbitron',monospace" }}>SELECT GAME</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {GAMES.map(g => {
+            const top = (scores[g.id] || [])[0];
+            return (
+              <div key={g.id} className="card" style={{ overflow: "hidden", position: "relative", borderColor: "rgba(255,255,255,.07)" }}>
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: g.bg }} />
+                <div style={{ position: "absolute", right: 16, top: 14, fontSize: 52, opacity: .08, filter: "blur(1px)" }}>{g.emoji}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 28, marginBottom: 6 }}>{g.emoji}</div>
+                    <h3 className="logo-font" style={{ margin: "0 0 3px", fontSize: 15, fontWeight: 700, letterSpacing: .04 }}>{g.name}</h3>
+                    <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,.35)" }}>{g.tagline}</p>
+                  </div>
+                  {top ? (
+                    <div style={{ textAlign: "right", flexShrink: 0, maxWidth: 100 }}>
+                      <div style={{ fontSize: 9, color: "rgba(255,255,255,.3)", letterSpacing: .1, fontFamily: "'Orbitron',monospace", marginBottom: 2 }}>🏆 BEST</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: "#fbbf24", lineHeight: 1, fontFamily: "'Orbitron',monospace" }}>{top.score}</div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", marginTop: 2 }}>{top.displayName}</div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,.2)" }}>No scores yet</div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-full" style={{ background: g.bg, padding: 12, fontSize: 14, flex: 1 }} onClick={() => onPlay(g)}>▶ PLAY</button>
+                  <button className="btn btn-ghost" style={{ padding: "12px 16px", fontSize: 18, flexShrink: 0 }} onClick={() => onBoard(g)} title="Leaderboard">📊</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: .12, textTransform: "uppercase", marginBottom: 12, fontFamily: "'Orbitron',monospace" }}>HALL OF FAME</div>
+          <div className="card" style={{ padding: "14px 18px" }}>
+            {GAMES.map(g => {
+              const top = (scores[g.id] || [])[0];
+              if (!top) return null;
+              return (
+                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.05)" }}>
+                  <span style={{ fontSize: 16 }}>{g.emoji}</span>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,.5)", flex: 1 }}>{g.name}</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,.5)" }}>{top.displayName}</span>
+                  <span style={{ fontFamily: "'Orbitron',monospace", fontSize: 14, fontWeight: 700, color: "#fbbf24", marginLeft: 8 }}>{top.score}</span>
+                </div>
+              );
+            })}
+            {GAMES.every(g => !(scores[g.id] || []).length) && (
+              <p style={{ margin: 0, color: "rgba(255,255,255,.2)", fontSize: 13, textAlign: "center", padding: "8px 0" }}>No records yet. Play to be first! 🚀</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Leaderboard ───────────────────────────────────────────────
+function BoardScreen({ game, scores, allScores, user, onPlay, onBack }) {
+  const [activeGame, setActiveGame] = useState(game);
+  const activeScores = allScores[activeGame.id] || [];
+  const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+  return (
+    <div className="screen" style={{ minHeight: "100vh", background: "#07070f", paddingBottom: 40 }}>
+      <div style={{ background: "rgba(255,255,255,.03)", borderBottom: "1px solid rgba(255,255,255,.07)", padding: "16px 18px", display: "flex", alignItems: "center", gap: 12 }}>
+        <button className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 14 }} onClick={onBack}>← Back</button>
+        <div className="logo-font" style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.6)", letterSpacing: .08 }}>LEADERBOARD</div>
+      </div>
+      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,.07)", overflowX: "auto" }}>
+        {GAMES.map(g => (
+          <button key={g.id} className="btn" onClick={() => setActiveGame(g)} style={{ background: "transparent", borderRadius: 0, padding: "12px 18px", fontSize: 13, color: activeGame.id === g.id ? "#fff" : "rgba(255,255,255,.35)", borderBottom: `2px solid ${activeGame.id === g.id ? g.accent : "transparent"}`, whiteSpace: "nowrap" }}>
+            {g.emoji} {g.name}
+          </button>
+        ))}
+      </div>
+      <div style={{ padding: 18 }}>
+        <div style={{ textAlign: "center", padding: "24px 0 20px" }}>
+          <div style={{ fontSize: 52, marginBottom: 8 }}>{activeGame.emoji}</div>
+          <h2 className="logo-font" style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700, color: activeGame.accent }}>{activeGame.name}</h2>
+          <p style={{ margin: "0 0 20px", fontSize: 12, color: "rgba(255,255,255,.3)" }}>{activeGame.tagline}</p>
+          <button className="btn" style={{ background: activeGame.bg, padding: "11px 24px", fontSize: 13 }} onClick={() => onPlay(activeGame)}>▶ PLAY NOW</button>
+        </div>
+        {activeScores.length === 0 ? (
+          <div className="card" style={{ textAlign: "center", color: "rgba(255,255,255,.25)", padding: 32, fontSize: 14 }}>No scores yet.<br />Be the first to play! 🚀</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {activeScores.map((s, i) => (
+              <div key={i} className="card" style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: i === 0 ? "rgba(251,191,36,.07)" : "rgba(255,255,255,.04)", border: `1px solid ${i === 0 ? "rgba(251,191,36,.3)" : "rgba(255,255,255,.07)"}`, animation: `slideUp .3s ease-out ${i * .08}s both` }}>
+                <span style={{ fontSize: 24, minWidth: 32 }}>{medals[i]}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.displayName}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)" }}>{s.email}</div>
+                </div>
+                <div className="logo-font" style={{ fontSize: 22, fontWeight: 700, color: "#fbbf24" }}>{s.score}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Invite Screen ─────────────────────────────────────────────
+function InviteScreen({ user, onInvite, onBack }) {
+  const [email, setEmail] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const mine = (gs("gc:invites") || []).filter(i => i.by === user.email);
+
+  function send() {
+    if (!email.trim()) return;
+    setLoading(true); setMsg(null);
+    const r = onInvite(email.trim().toLowerCase());
+    setMsg(r);
+    if (r.ok) setEmail("");
+    setLoading(false);
+  }
+
+  return (
+    <div className="screen" style={{ minHeight: "100vh", background: "#07070f", paddingBottom: 40 }}>
+      <div style={{ background: "rgba(255,255,255,.03)", borderBottom: "1px solid rgba(255,255,255,.07)", padding: "16px 18px", display: "flex", alignItems: "center", gap: 12 }}>
+        <button className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 14 }} onClick={onBack}>← Back</button>
+        <div className="logo-font" style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,.6)", letterSpacing: .08 }}>INVITE FRIENDS</div>
+      </div>
+      <div style={{ padding: 18 }}>
+        <p style={{ color: "rgba(255,255,255,.4)", fontSize: 13, marginBottom: 20 }}>Game Center is invite-only. Share access with your Gmail friends.</p>
+        <div className="card" style={{ marginBottom: 20 }}>
+          <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,.4)", letterSpacing: .1, marginBottom: 10, fontFamily: "'Orbitron',monospace" }}>GMAIL ADDRESS</label>
+          <input className="inp" type="email" placeholder="friend@gmail.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} style={{ marginBottom: 12 }} />
+          {msg && <p style={{ fontSize: 13, margin: "0 0 10px", color: msg.ok ? "#4ade80" : "#f87171" }}>{msg.ok ? `✅ Invite saved for ${email || "them"}!` : `❌ ${msg.error}`}</p>}
+          <button className="btn btn-purple btn-full" onClick={send} disabled={loading} style={{ padding: 13 }}>{loading ? "SAVING…" : "SEND INVITE →"}</button>
+        </div>
+        {mine.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: .12, textTransform: "uppercase", marginBottom: 12, fontFamily: "'Orbitron',monospace" }}>YOUR INVITES</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {mine.map((inv, i) => (
+                <div key={i} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,.7)" }}>{inv.email}</span>
+                  <span className="tag" style={{ background: inv.status === "accepted" ? "rgba(74,222,128,.12)" : "rgba(255,255,255,.06)", color: inv.status === "accepted" ? "#4ade80" : "rgba(255,255,255,.4)" }}>{inv.status.toUpperCase()}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Timer Bar ─────────────────────────────────────────────────
+function TimerBar({ current, max, color }) {
+  const pct = (current / max) * 100;
+  const c = current > max * .5 ? color : current > max * .25 ? "#fbbf24" : "#f87171";
+  return (
+    <div style={{ height: 5, background: "rgba(255,255,255,.08)", borderRadius: 3 }}>
+      <div style={{ height: "100%", width: `${pct}%`, background: c, borderRadius: 3, transition: "width 0.9s linear, background 0.3s" }} />
+    </div>
+  );
+}
+
+// ── Score Flash ───────────────────────────────────────────────
+function ScoreFlash({ pts, correct }) {
+  if (pts === null) return null;
+  return (
+    <div style={{ textAlign: "center", padding: "8px 0", animation: "popIn .3s ease-out" }}>
+      {correct
+        ? <span style={{ color: "#4ade80", fontWeight: 700, fontSize: 18, fontFamily: "'Orbitron',monospace" }}>+{pts} pts ✓</span>
+        : <span style={{ color: "#f87171", fontWeight: 700, fontSize: 18 }}>✗ Incorrect</span>}
+    </div>
+  );
+}
+
+// ── Game Wrapper ──────────────────────────────────────────────
+function GameWrapper({ game, user, onScore, onBack }) {
+  const [result, setResult] = useState(null);
+
+  function handleScore(pts) {
+    const top5 = onScore(game.id, pts);
+    setResult({ score: pts, top5 });
+  }
+
+  if (result) {
+    const rank = result.top5.findIndex(s => s.email === user.email && s.score === result.score) + 1;
+    const rankLabels = ["🥇 1st Place!", "🥈 2nd Place!", "🥉 3rd Place!", "4th Place", "5th Place"];
+    const maxScore = game.id === "trivia" ? 500 : game.id === "riddles" ? 500 : 600;
+    const pct = Math.round((result.score / maxScore) * 100);
+    return (
+      <div className="screen" style={{ minHeight: "100vh", background: "#07070f", paddingBottom: 40 }}>
+        <div style={{ padding: "20px 18px 0", display: "flex", justifyContent: "space-between" }}>
+          <button className="btn btn-ghost" style={{ padding: "9px 14px", fontSize: 14 }} onClick={onBack}>← Hub</button>
+          <button className="btn" style={{ background: game.bg, padding: "9px 16px", fontSize: 13 }} onClick={() => setResult(null)}>🔄 Play Again</button>
+        </div>
+        <div style={{ textAlign: "center", padding: "24px 18px 20px" }}>
+          <div style={{ fontSize: 64, animation: "popIn .4s cubic-bezier(.34,1.56,.64,1)" }}>{result.score >= 400 ? "🏆" : result.score >= 250 ? "🎉" : "💪"}</div>
+          <h2 className="logo-font" style={{ margin: "12px 0 4px", fontSize: 22, fontWeight: 900 }}>GAME OVER</h2>
+          <p style={{ color: "rgba(255,255,255,.4)", margin: "0 0 12px", fontSize: 13 }}>Your final score</p>
+          <div className="logo-font" style={{ fontSize: 52, fontWeight: 900, color: "#fbbf24", lineHeight: 1, textShadow: "0 0 20px rgba(251,191,36,.5)" }}>{result.score}</div>
+          {rank > 0 && rank <= 5 && <div style={{ marginTop: 10, fontSize: 14, color: game.accent, fontWeight: 600 }}>{rankLabels[rank - 1]} on the leaderboard!</div>}
+          <div style={{ margin: "16px auto 0", maxWidth: 260 }}>
+            <div style={{ height: 6, background: "rgba(255,255,255,.08)", borderRadius: 3 }}>
+              <div style={{ height: "100%", width: `${pct}%`, background: game.bg, borderRadius: 3, transition: "width 1s ease-out" }} />
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginTop: 4 }}>{pct}% of max score</div>
+          </div>
+        </div>
+        <div style={{ padding: "0 18px" }}>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: .12, textTransform: "uppercase", marginBottom: 12, fontFamily: "'Orbitron',monospace" }}>TOP 5 LEADERBOARD</div>
+          {result.top5.map((s, i) => (
+            <div key={i} className="card" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, padding: "12px 16px", background: s.email === user.email && s.score === result.score ? "rgba(167,139,250,.1)" : "rgba(255,255,255,.04)", border: `1px solid ${s.email === user.email && s.score === result.score ? "rgba(167,139,250,.4)" : "rgba(255,255,255,.07)"}` }}>
+              <span style={{ fontSize: 18, minWidth: 24 }}>{["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][i]}</span>
+              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.displayName}</span>
+              <span className="logo-font" style={{ fontWeight: 700, color: "#fbbf24", fontSize: 16 }}>{s.score}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#07070f" }}>
+      <div style={{ background: "rgba(255,255,255,.03)", borderBottom: "1px solid rgba(255,255,255,.07)", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button className="btn btn-ghost" style={{ padding: "8px 12px", fontSize: 14 }} onClick={onBack}>← Hub</button>
+        <div style={{ textAlign: "center" }}>
+          <span style={{ fontSize: 20 }}>{game.emoji}</span>
+          <div className="logo-font" style={{ fontSize: 12, fontWeight: 700, color: game.accent, letterSpacing: .06 }}>{game.name.toUpperCase()}</div>
+        </div>
+        <div style={{ width: 72 }} />
+      </div>
+      <div style={{ padding: 18 }}>
+        {game.id === "trivia" && <TriviaGame onScore={handleScore} accent={game.accent} bg={game.bg} />}
+        {game.id === "riddles" && <RiddleGame onScore={handleScore} accent={game.accent} bg={game.bg} />}
+        {game.id === "truefalse" && <TrueFalseGame onScore={handleScore} accent={game.accent} bg={game.bg} />}
+      </div>
+    </div>
+  );
+}
+
+// ── TRIVIA GAME ───────────────────────────────────────────────
+function TriviaGame({ onScore, accent, bg }) {
+  const [phase, setPhase] = useState("setup");
+  const [topic, setTopic] = useState("");
+  const [qs, setQs] = useState([]);
+  const [qi, setQi] = useState(0);
+  const [chosen, setChosen] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [dispTime, setDispTime] = useState(15);
+  const [scoreDisp, setScoreDisp] = useState(0);
+  const [lastPts, setLastPts] = useState(null);
+  const timerRef = useRef(null);
+  const timeRef = useRef(15);
+  const qiRef = useRef(0);
+  const scoreRef = useRef(0);
+  const TOPICS = ["Science 🔬", "History 🏛", "Sports ⚽", "Movies 🎬", "Music 🎵", "Food 🍕", "Geography 🌍", "Technology 💻", "Animals 🐾", "Space 🚀"];
+
+  async function start(t) {
+    setTopic(t); setPhase("loading");
+    try {
+      const data = await ai(`Generate 5 multiple choice trivia questions about "${t}". Return ONLY a JSON array: [{"question":"...","options":["...","...","...","..."],"correct":0}] Rules: "correct" is 0-based index of correct answer. Make questions fun and varied.`);
+      setQs(data); qiRef.current = 0; scoreRef.current = 0;
+      setQi(0); setScoreDisp(0); setChosen(null); setRevealed(false); setLastPts(null);
+      setPhase("playing"); startTimer();
+    } catch (e) {
+      setPhase("setup");
+      alert(e.message === "NO_KEY" ? "Please set your API key first (🔑 button)." : "Failed to generate questions. Try again.");
+    }
+  }
+
+  function startTimer() {
+    clearInterval(timerRef.current);
+    timeRef.current = 15; setDispTime(15);
+    timerRef.current = setInterval(() => { timeRef.current -= 1; setDispTime(t => t - 1); if (timeRef.current <= 0) { clearInterval(timerRef.current); handleAnswer(-1); } }, 1000);
+  }
+
+  function handleAnswer(idx) {
+    clearInterval(timerRef.current);
+    if (revealed) return;
+    setChosen(idx); setRevealed(true);
+    const q = qs[qiRef.current];
+    const correct = idx === q.correct;
+    const pts = correct ? Math.round(60 + (timeRef.current / 15) * 40) : 0;
+    setLastPts({ pts, correct });
+    scoreRef.current += pts; setScoreDisp(scoreRef.current);
+    setTimeout(() => {
+      const next = qiRef.current + 1; setLastPts(null);
+      if (next >= qs.length) { onScore(scoreRef.current); }
+      else { qiRef.current = next; setQi(next); setChosen(null); setRevealed(false); startTimer(); }
+    }, 1400);
+  }
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  if (phase === "setup") return (
+    <div>
+      <h3 style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 700 }}>Choose a Topic</h3>
+      <p style={{ margin: "0 0 18px", color: "rgba(255,255,255,.4)", fontSize: 13 }}>5 questions · 15 sec each · Up to 100 pts per question</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        {TOPICS.map(t => <button key={t} className="btn btn-ghost" style={{ padding: "13px 10px", fontSize: 13, textAlign: "left" }} onClick={() => start(t.split(" ")[0])}>{t}</button>)}
+      </div>
+      <input className="inp" placeholder="🔍 Type your own topic..." onKeyDown={e => { if (e.key === "Enter" && e.target.value.trim()) start(e.target.value.trim()); }} />
+    </div>
+  );
+
+  if (phase === "loading") return (
+    <div style={{ textAlign: "center", padding: "60px 0" }}>
+      <div style={{ fontSize: 56, display: "inline-block", animation: "spin 1.5s linear infinite" }}>🧠</div>
+      <p style={{ color: "rgba(255,255,255,.4)", marginTop: 16 }}>Generating {topic} questions…</p>
+    </div>
+  );
+
+  const q = qs[qi];
+  const tc = dispTime > 8 ? "#4ade80" : dispTime > 4 ? "#fbbf24" : "#f87171";
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, color: "rgba(255,255,255,.5)" }}>
+        <span>Question <span style={{ color: "#f0f0ff", fontWeight: 600 }}>{qi + 1}</span> / {qs.length}</span>
+        <span className="logo-font" style={{ color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>{scoreDisp} PTS</span>
+        <span style={{ color: tc, fontWeight: 700, fontFamily: "'Orbitron',monospace" }}>{dispTime}s</span>
+      </div>
+      <TimerBar current={dispTime} max={15} color={accent} />
+      <div className="card" style={{ margin: "14px 0", minHeight: 80, display: "flex", alignItems: "center" }}>
+        <p style={{ margin: 0, fontSize: 16, fontWeight: 600, lineHeight: 1.6 }}>{q?.question}</p>
+      </div>
+      {lastPts && <ScoreFlash pts={lastPts.pts} correct={lastPts.correct} />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        {q?.options.map((opt, i) => {
+          let bg = "rgba(255,255,255,.05)", border = "1px solid rgba(255,255,255,.09)", textColor = "#f0f0ff";
+          if (revealed) { if (i === q.correct) { bg = "rgba(74,222,128,.12)"; border = "1px solid #4ade80"; textColor = "#4ade80"; } else if (i === chosen) { bg = "rgba(248,113,113,.12)"; border = "1px solid #f87171"; textColor = "#f87171"; } }
+          return (
+            <button key={i} onClick={() => !revealed && handleAnswer(i)} style={{ background: bg, border, borderRadius: 11, padding: "14px 16px", cursor: "pointer", textAlign: "left", color: textColor, fontSize: 14, fontWeight: 500, fontFamily: "'Syne',sans-serif", transition: "background .2s" }}>
+              <span style={{ color: "rgba(255,255,255,.3)", marginRight: 10, fontFamily: "'Orbitron',monospace", fontSize: 11 }}>{["A", "B", "C", "D"][i]}</span>{opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── RIDDLE GAME ───────────────────────────────────────────────
+function RiddleGame({ onScore, accent, bg }) {
+  const [phase, setPhase] = useState("intro");
+  const [riddles, setRiddles] = useState([]);
+  const [ri, setRi] = useState(0);
+  const [chosen, setChosen] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [dispTime, setDispTime] = useState(20);
+  const [scoreDisp, setScoreDisp] = useState(0);
+  const [lastPts, setLastPts] = useState(null);
+  const timerRef = useRef(null);
+  const timeRef = useRef(20);
+  const riRef = useRef(0);
+  const scoreRef = useRef(0);
+
+  async function start() {
+    setPhase("loading");
+    try {
+      const data = await ai(`Generate 5 clever riddles with multiple choice answers. Return ONLY a JSON array: [{"riddle":"...","options":["...","...","...","..."],"correct":0,"explanation":"..."}] Rules: "correct" is 0-based index. Place correct answer at a random position. Make riddles tricky but fair.`);
+      setRiddles(data); riRef.current = 0; scoreRef.current = 0;
+      setRi(0); setScoreDisp(0); setChosen(null); setRevealed(false); setLastPts(null);
+      setPhase("playing"); startTimer();
+    } catch (e) {
+      setPhase("intro");
+      alert(e.message === "NO_KEY" ? "Please set your API key first (🔑 button)." : "Couldn't generate riddles. Try again!");
+    }
+  }
+
+  function startTimer() {
+    clearInterval(timerRef.current);
+    timeRef.current = 20; setDispTime(20);
+    timerRef.current = setInterval(() => { timeRef.current -= 1; setDispTime(t => t - 1); if (timeRef.current <= 0) { clearInterval(timerRef.current); handleAnswer(-1); } }, 1000);
+  }
+
+  function handleAnswer(idx) {
+    clearInterval(timerRef.current);
+    if (revealed) return;
+    setChosen(idx); setRevealed(true);
+    const r = riddles[riRef.current];
+    const correct = idx === r.correct;
+    const pts = correct ? Math.round(60 + (timeRef.current / 20) * 40) : 0;
+    setLastPts({ pts, correct });
+    scoreRef.current += pts; setScoreDisp(scoreRef.current);
+    setTimeout(() => {
+      const next = riRef.current + 1; setLastPts(null);
+      if (next >= riddles.length) { onScore(scoreRef.current); }
+      else { riRef.current = next; setRi(next); setChosen(null); setRevealed(false); startTimer(); }
+    }, 1600);
+  }
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  if (phase === "intro") return (
+    <div style={{ textAlign: "center", padding: "20px 0" }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>🔮</div>
+      <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>Riddle Rush</h3>
+      <p style={{ color: "rgba(255,255,255,.4)", margin: "0 0 28px", fontSize: 13 }}>5 AI-crafted riddles · 20 sec each · Up to 100 pts each</p>
+      <button className="btn" style={{ background: bg, padding: "14px 36px", fontSize: 15 }} onClick={start}>START RIDDLES →</button>
+    </div>
+  );
+
+  if (phase === "loading") return (
+    <div style={{ textAlign: "center", padding: "60px 0" }}>
+      <div style={{ fontSize: 56, animation: "pulse 1s ease-in-out infinite" }}>🔮</div>
+      <p style={{ color: "rgba(255,255,255,.4)", marginTop: 16 }}>Conjuring mysterious riddles…</p>
+    </div>
+  );
+
+  const r = riddles[ri];
+  const tc = dispTime > 10 ? "#f472b6" : dispTime > 5 ? "#fbbf24" : "#f87171";
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, color: "rgba(255,255,255,.5)" }}>
+        <span>Riddle <span style={{ color: "#f0f0ff", fontWeight: 600 }}>{ri + 1}</span> / {riddles.length}</span>
+        <span className="logo-font" style={{ color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>{scoreDisp} PTS</span>
+        <span style={{ color: tc, fontWeight: 700, fontFamily: "'Orbitron',monospace" }}>{dispTime}s</span>
+      </div>
+      <TimerBar current={dispTime} max={20} color={accent} />
+      <div className="card" style={{ margin: "14px 0", background: "rgba(244,114,182,.06)", border: "1px solid rgba(244,114,182,.15)" }}>
+        <div style={{ fontSize: 10, color: "rgba(244,114,182,.7)", letterSpacing: .1, marginBottom: 8, fontFamily: "'Orbitron',monospace" }}>🔮 RIDDLE</div>
+        <p style={{ margin: 0, fontSize: 16, fontWeight: 600, lineHeight: 1.6, fontStyle: "italic" }}>"{r?.riddle}"</p>
+      </div>
+      {revealed && r?.explanation && <div className="card" style={{ marginBottom: 12, background: "rgba(167,139,250,.07)", border: "1px solid rgba(167,139,250,.2)", fontSize: 13, color: "rgba(255,255,255,.6)" }}>💡 {r.explanation}</div>}
+      {lastPts && <ScoreFlash pts={lastPts.pts} correct={lastPts.correct} />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        {r?.options.map((opt, i) => {
+          let bg = "rgba(255,255,255,.05)", border = "1px solid rgba(255,255,255,.09)", textColor = "#f0f0ff";
+          if (revealed) { if (i === r.correct) { bg = "rgba(74,222,128,.12)"; border = "1px solid #4ade80"; textColor = "#4ade80"; } else if (i === chosen) { bg = "rgba(248,113,113,.12)"; border = "1px solid #f87171"; textColor = "#f87171"; } }
+          return <button key={i} onClick={() => !revealed && handleAnswer(i)} style={{ background: bg, border, borderRadius: 11, padding: "14px 16px", cursor: "pointer", textAlign: "left", color: textColor, fontSize: 14, fontWeight: 500, fontFamily: "'Syne',sans-serif", transition: "background .2s" }}>{opt}</button>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── TRUE OR FALSE GAME ────────────────────────────────────────
+function TrueFalseGame({ onScore, accent, bg }) {
+  const [phase, setPhase] = useState("intro");
+  const [stmts, setStmts] = useState([]);
+  const [si, setSi] = useState(0);
+  const [chosen, setChosen] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [dispTime, setDispTime] = useState(10);
+  const [scoreDisp, setScoreDisp] = useState(0);
+  const [lastPts, setLastPts] = useState(null);
+  const timerRef = useRef(null);
+  const timeRef = useRef(10);
+  const siRef = useRef(0);
+  const scoreRef = useRef(0);
+
+  async function start() {
+    setPhase("loading");
+    try {
+      const data = await ai(`Generate 8 true/false statements. Mix surprising, counterintuitive facts. Return ONLY a JSON array: [{"statement":"...","answer":true,"explanation":"..."}] Rules: "answer" is boolean. Mix topics: science, history, nature, food, geography, pop culture.`);
+      setStmts(data); siRef.current = 0; scoreRef.current = 0;
+      setSi(0); setScoreDisp(0); setChosen(null); setRevealed(false); setLastPts(null);
+      setPhase("playing"); startTimer();
+    } catch (e) {
+      setPhase("intro");
+      alert(e.message === "NO_KEY" ? "Please set your API key first (🔑 button)." : "Couldn't generate statements. Try again!");
+    }
+  }
+
+  function startTimer() {
+    clearInterval(timerRef.current);
+    timeRef.current = 10; setDispTime(10);
+    timerRef.current = setInterval(() => { timeRef.current -= 1; setDispTime(t => t - 1); if (timeRef.current <= 0) { clearInterval(timerRef.current); handleAnswer(null); } }, 1000);
+  }
+
+  function handleAnswer(ans) {
+    clearInterval(timerRef.current);
+    if (revealed) return;
+    setChosen(ans); setRevealed(true);
+    const s = stmts[siRef.current];
+    const correct = ans === s.answer;
+    const pts = correct ? Math.round(45 + (timeRef.current / 10) * 30) : 0;
+    setLastPts({ pts, correct });
+    scoreRef.current += pts; setScoreDisp(scoreRef.current);
+    setTimeout(() => {
+      const next = siRef.current + 1; setLastPts(null);
+      if (next >= stmts.length) { onScore(scoreRef.current); }
+      else { siRef.current = next; setSi(next); setChosen(null); setRevealed(false); startTimer(); }
+    }, 1600);
+  }
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  if (phase === "intro") return (
+    <div style={{ textAlign: "center", padding: "20px 0" }}>
+      <div style={{ fontSize: 64, marginBottom: 16 }}>⚡</div>
+      <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700 }}>True or False</h3>
+      <p style={{ color: "rgba(255,255,255,.4)", margin: "0 0 28px", fontSize: 13 }}>8 AI statements · 10 sec each · Up to 75 pts each</p>
+      <button className="btn" style={{ background: bg, padding: "14px 36px", fontSize: 15 }} onClick={start}>START GAME →</button>
+    </div>
+  );
+
+  if (phase === "loading") return (
+    <div style={{ textAlign: "center", padding: "60px 0" }}>
+      <div style={{ fontSize: 56, animation: "pulse 0.8s ease-in-out infinite" }}>⚡</div>
+      <p style={{ color: "rgba(255,255,255,.4)", marginTop: 16 }}>Generating facts and fiction…</p>
+    </div>
+  );
+
+  const st = stmts[si];
+  const tc = dispTime > 5 ? "#38bdf8" : dispTime > 2 ? "#fbbf24" : "#f87171";
+
+  function btnStyle(val) {
+    let bg = "rgba(255,255,255,.05)", border = "1px solid rgba(255,255,255,.1)", color = "#f0f0ff";
+    if (revealed) {
+      if (st.answer === val) { bg = "rgba(74,222,128,.12)"; border = "2px solid #4ade80"; color = "#4ade80"; }
+      else if (chosen === val && chosen !== st.answer) { bg = "rgba(248,113,113,.12)"; border = "2px solid #f87171"; color = "#f87171"; }
+    } else if (chosen === val) { bg = "rgba(56,189,248,.15)"; border = "2px solid #38bdf8"; }
+    return { background: bg, border, borderRadius: 12, padding: "22px 10px", cursor: "pointer", fontFamily: "'Orbitron',monospace", fontSize: 18, fontWeight: 700, color, transition: "background .2s,border .2s", flex: 1 };
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, color: "rgba(255,255,255,.5)" }}>
+        <span><span style={{ color: "#f0f0ff", fontWeight: 600 }}>{si + 1}</span> / {stmts.length}</span>
+        <span className="logo-font" style={{ color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>{scoreDisp} PTS</span>
+        <span style={{ color: tc, fontWeight: 700, fontFamily: "'Orbitron',monospace" }}>{dispTime}s</span>
+      </div>
+      <TimerBar current={dispTime} max={10} color={accent} />
+      <div className="card" style={{ margin: "14px 0", minHeight: 100, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+        <p style={{ margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.7 }}>{st?.statement}</p>
+      </div>
+      {revealed && st?.explanation && <div className="card" style={{ marginBottom: 12, background: "rgba(56,189,248,.06)", border: "1px solid rgba(56,189,248,.15)", fontSize: 13, color: "rgba(255,255,255,.6)" }}>💡 {st.explanation}</div>}
+      {lastPts && <ScoreFlash pts={lastPts.pts} correct={lastPts.correct} />}
+      <div style={{ display: "flex", gap: 12 }}>
+        <button style={btnStyle(true)} onClick={() => !revealed && handleAnswer(true)}>✓ TRUE</button>
+        <button style={btnStyle(false)} onClick={() => !revealed && handleAnswer(false)}>✗ FALSE</button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
