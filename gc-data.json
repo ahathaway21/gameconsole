@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773603265541,
+  "updatedAt": 1773603299493,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -24,14 +24,6 @@
       "passwordHash": "9a7d9e7b18d9572adcbbe6a3816ae1cff471947108738fd0d31c178680274546",
       "isAdmin": false,
       "joinedAt": 1773598118254,
-      "invitedBy": "ahathaway21@gmail.com"
-    },
-    {
-      "email": "thehathawayluke@gmail.com",
-      "displayName": "thehathawayluke",
-      "passwordHash": "391614377d768e30edf0c6605e3f40ee5ca1c75230db2f334d8e2b0482f0be2c",
-      "isAdmin": false,
-      "joinedAt": 1773602790539,
       "invitedBy": "ahathaway21@gmail.com"
     }
   ],
@@ -75,38 +67,20 @@
       {
         "email": "ahathaway21@gmail.com",
         "displayName": "ahathaway21",
+        "score": 5070,
+        "date": 1773603299492
+      },
+      {
+        "email": "ahathaway21@gmail.com",
+        "displayName": "ahathaway21",
         "score": 3920,
         "date": 1773602733475
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 3590,
-        "date": 1773603130372
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 3350,
-        "date": 1773603247257
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 3200,
-        "date": 1773603061243
       },
       {
         "email": "ahathaway21@gmail.com",
         "displayName": "ahathaway21",
         "score": 1970,
         "date": 1773602636540
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 1930,
-        "date": 1773602957049
       },
       {
         "email": "ahathaway21@gmail.com",
@@ -119,30 +93,6 @@
         "displayName": "ahathaway21",
         "score": 1350,
         "date": 1773602884886
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 790,
-        "date": 1773602886202
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 790,
-        "date": 1773602998770
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 700,
-        "date": 1773603166429
-      },
-      {
-        "email": "thehathawayluke@gmail.com",
-        "displayName": "thehathawayluke",
-        "score": 640,
-        "date": 1773602837808
       },
       {
         "email": "ahathaway21@gmail.com",
