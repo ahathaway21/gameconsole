@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "updatedAt": 1773598118254,
+  "updatedAt": 1773598173226,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -29,7 +29,16 @@
     }
   ],
   "scores": {},
-  "customGamesMeta": [],
+  "customGamesMeta": [
+    {
+      "id": "custom-f1-family-betting-mms2k4cr",
+      "name": "f1-family-betting",
+      "emoji": "🎮",
+      "description": "A custom game",
+      "bg": "linear-gradient(135deg,#0f766e,#0d9488)",
+      "accent": "#2dd4bf"
+    }
+  ],
   "ghConfig": {
     "owner": "ahathaway21",
     "repo": "gameconsole"
