@@ -178,21 +178,21 @@ function ghReadGameFile(id){
 }
 
 // Build the canonical data object from localStorage
-// Note: game HTML stored separately in gc-games/{id}.html; token NEVER written to repo
+// Games HTML is embedded directly — single file, single write, no token needed to read
 function buildGhData(){
   var scores={};
   for(var i=0;i<localStorage.length;i++){
     var k=localStorage.key(i);
     if(k&&k.startsWith('gc:scores:')){ var v=gsGet(k); if(v&&v.length) scores[k.slice(10)]=v; }
   }
-  // Metadata only — HTML stored as separate files in gc-games/
-  var cgMeta=(gsGet('gc:custom-games')||[]).map(function(g){
-    return {id:g.id,name:g.name,emoji:g.emoji,description:g.description,bg:g.bg,accent:g.accent};
+  // Include full game data (with HTML) so all games are in one file
+  var cgFull=(gsGet('gc:custom-games')||[]).map(function(g){
+    return {id:g.id,name:g.name,emoji:g.emoji,description:g.description,
+            bg:g.bg,accent:g.accent,html:g.html||''};
   });
-  // Store owner+repo only — token stays in localStorage, never in the repo
   var ghConf=gsGet('gc:gh-config')||{};
-  return {version:3,updatedAt:Date.now(),users:gsGet('gc:users')||[],
-          invites:gsGet('gc:invites')||[],scores:scores,customGamesMeta:cgMeta,
+  return {version:4,updatedAt:Date.now(),users:gsGet('gc:users')||[],
+          invites:gsGet('gc:invites')||[],scores:scores,customGames:cgFull,
           ghConfig:{owner:ghConf.owner||'',repo:ghConf.repo||''}};
 }
 
@@ -231,13 +231,17 @@ function applyGhData(d){
       if(d.scores[gid] && d.scores[gid].length) gsSet('gc:scores:'+gid, d.scores[gid]);
     });
   }
-  // Custom game metadata
-  if(d.customGamesMeta && d.customGamesMeta.length){
+  // Custom games — full data including HTML embedded in gc-data.json
+  var ghGames=d.customGames||(d.customGamesMeta?d.customGamesMeta.map(function(m){return Object.assign({html:'',builtin:false},m);}):null);
+  if(ghGames&&ghGames.length){
     var local=gsGet('gc:custom-games')||[];
-    var mergedGames=d.customGamesMeta.map(function(meta){
-      var local1=local.find(function(g){return g.id===meta.id;});
-      return local1?local1:Object.assign({html:'',builtin:false},meta);
+    var mergedGames=ghGames.map(function(ghg){
+      var loc=local.find(function(g){return g.id===ghg.id;});
+      // Prefer GitHub HTML if it exists, fall back to local
+      var html=(ghg.html&&ghg.html.length>0)?ghg.html:(loc?loc.html||'':'');
+      return Object.assign({},ghg,{html:html,builtin:false});
     });
+    // Keep any local-only games not yet in GitHub
     local.forEach(function(g){
       if(!mergedGames.find(function(m){return m.id===g.id;})) mergedGames.push(g);
     });
@@ -245,33 +249,54 @@ function applyGhData(d){
   }
 }
 
-// Pull from GitHub then continue — fetches metadata AND any missing game HTML files
-// Uses readable() — works for all users even without a token (public repo)
+// Pull from GitHub — gc-data.json now contains full game HTML
+// ghReadGameFile kept as fallback for old-format entries
 function syncFromGH(){
   if(!GH.readable()) return Promise.resolve();
   return ghRead().then(function(d){
     applyGhData(d);
-    // Fetch HTML for any games missing locally
+    // Fallback: fetch separate game files for any still missing HTML (old format)
     var games=gsGet('gc:custom-games')||[];
     var missing=games.filter(function(g){ return !g.html||g.html===''; });
     if(missing.length===0) return;
     return Promise.all(missing.map(function(g){
       return ghReadGameFile(g.id).then(function(html){
         if(html){
-          g.html=html;
           var all=gsGet('gc:custom-games')||[];
-          var updated=all.map(function(x){ return x.id===g.id?Object.assign({},x,{html:html}):x; });
-          gsSet('gc:custom-games',updated);
+          gsSet('gc:custom-games',all.map(function(x){ return x.id===g.id?Object.assign({},x,{html:html}):x; }));
         }
       });
     }));
   });
 }
 
-// Push to GitHub — fire-and-forget after any data change
+// Push to GitHub — includes all local game HTML so everything is in gc-data.json
 function syncToGH(){
   if(!GH.configured()) return;
-  ghWrite(buildGhData()); // result ignored for background syncs
+  ghWrite(buildGhData());
+}
+
+// Full sync — pull from GitHub then push back with any local-only games merged in
+// This is what the Sync button calls — ensures your token pushes everyone's games
+function fullSync(){
+  if(!GH.readable()) return Promise.resolve();
+  return ghRead().then(function(d){
+    applyGhData(d);
+    // Fallback: fetch separate game files for any still missing HTML
+    var games=gsGet('gc:custom-games')||[];
+    var missing=games.filter(function(g){ return !g.html||g.html===''; });
+    return Promise.all(missing.map(function(g){
+      return ghReadGameFile(g.id).then(function(html){
+        if(html){
+          var all=gsGet('gc:custom-games')||[];
+          gsSet('gc:custom-games',all.map(function(x){ return x.id===g.id?Object.assign({},x,{html:html}):x; }));
+        }
+      });
+    })).then(function(){
+      // If we have a token, push back — merges any local games into GitHub
+      if(GH.configured()) ghWrite(buildGhData());
+    });
+  });
 }
 
 /* ================================================================
@@ -390,7 +415,7 @@ function renderBoot(app){
     checkInviteParam();
     var status=document.getElementById('boot-status');
     if(status) status.textContent=GH.readable()?'Syncing...':'Loading...';
-    syncFromGH().then(function(){
+    fullSync().then(function(){
       S.customGames=gsGet('gc:custom-games')||[];
       var email=localStorage.getItem('gc:me');
       var users=gsGet('gc:users')||[];
@@ -601,7 +626,7 @@ function renderHub(app){
   document.getElementById('hub-sync').addEventListener('click',function(){
     var btn=document.getElementById('hub-sync');
     if(btn){ btn.textContent='Syncing...'; btn.disabled=true; }
-    syncFromGH().then(function(){
+    fullSync().then(function(){
       S.customGames=gsGet('gc:custom-games')||[];
       loadScores();
       renderHub(document.getElementById('app'));
@@ -1006,9 +1031,16 @@ function renderAdmin(app){
     ghSyncBtn.addEventListener('click',function(){
       var msg=document.getElementById('gh-sync-msg');
       ghSyncBtn.textContent='Syncing...'; ghSyncBtn.disabled=true;
-      ghWrite(buildGhData()).then(function(result){
-        ghSyncBtn.textContent='&#8635; Sync Now'; ghSyncBtn.disabled=false;
-        if(msg) msg.innerHTML=(result&&result.ok)?'<p class="ok-msg">&#10003; Synced successfully.</p>':'<p class="err-msg">Sync failed: '+(result&&result.msg?esc(result.msg):'unknown error')+'</p>';
+      ghSyncBtn.addEventListener('click',function(){
+        var msg=document.getElementById('gh-sync-msg');
+        ghSyncBtn.textContent='Syncing...'; ghSyncBtn.disabled=true;
+        fullSync().then(function(){
+          ghSyncBtn.textContent='&#8635; Sync Now'; ghSyncBtn.disabled=false;
+          if(msg) msg.innerHTML='<p class="ok-msg">&#10003; Synced successfully.</p>';
+        }).catch(function(){
+          ghSyncBtn.textContent='&#8635; Sync Now'; ghSyncBtn.disabled=false;
+          if(msg) msg.innerHTML='<p class="err-msg">Sync failed. Check your access key.</p>';
+        });
       });
     });
   }
