@@ -72,11 +72,7 @@ body{background:#07070f;color:#f0f0ff;font-family:'Syne',system-ui,sans-serif;mi
 ================================================================ */
 var FOUNDER_EMAIL = 'ahathaway21@gmail.com';
 
-var BUILT_IN_GAMES = [{
-  id:'cat-blast', name:'Cat Blast', emoji:'\uD83D\uDC31',
-  description:'Block Blast with 7 cat breeds! Fill rows & columns to clear them.',
-  bg:'linear-gradient(135deg,#7c3aed,#be185d)', accent:'#f472b6', builtin:true
-}];
+var BUILT_IN_GAMES = [];  // No built-in games — upload games via Admin > Games
 
 /* ================================================================
    STORAGE
@@ -130,24 +126,70 @@ function ghWrite(data){
     .catch(function(){ return false; });
 }
 
+// Write a game HTML file to gc-games/{id}.html in the repo
+function ghWriteGameFile(id, html){
+  if(!GH.configured()) return Promise.resolve(false);
+  var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-games/'+id+'.html';
+  var headers={'Authorization':'token '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+  return fetch(apiUrl,{headers:headers})
+    .then(function(r){ return r.ok?r.json():null; })
+    .then(function(existing){
+      var body={message:'add game '+id,content:toB64(html)};
+      if(existing&&existing.sha) body.sha=existing.sha;
+      return fetch(apiUrl,{method:'PUT',headers:headers,body:JSON.stringify(body)});
+    })
+    .then(function(r){ return r&&r.ok; })
+    .catch(function(){ return false; });
+}
+
+// Delete a game HTML file from gc-games/{id}.html
+function ghDeleteGameFile(id){
+  if(!GH.configured()) return Promise.resolve(false);
+  var apiUrl='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/gc-games/'+id+'.html';
+  var headers={'Authorization':'token '+GH.token,'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+  return fetch(apiUrl,{headers:headers})
+    .then(function(r){ return r.ok?r.json():null; })
+    .then(function(existing){
+      if(!existing||!existing.sha) return true; // already gone
+      var body={message:'remove game '+id,sha:existing.sha};
+      return fetch(apiUrl,{method:'DELETE',headers:headers,body:JSON.stringify(body)})
+        .then(function(r){ return r&&r.ok; });
+    })
+    .catch(function(){ return false; });
+}
+
+// Fetch a single game HTML from GitHub (public raw URL, no auth needed)
+function ghReadGameFile(id){
+  var url='https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/main/gc-games/'+id+'.html?t='+Date.now();
+  return fetch(url).then(function(r){ return r.ok?r.text():null; }).catch(function(){ return null; });
+}
+
 // Build the canonical data object from localStorage
+// Note: game HTML is stored separately in gc-games/{id}.html — only metadata goes here
 function buildGhData(){
   var scores={};
   for(var i=0;i<localStorage.length;i++){
     var k=localStorage.key(i);
     if(k&&k.startsWith('gc:scores:')){ var v=gsGet(k); if(v&&v.length) scores[k.slice(10)]=v; }
   }
-  // Store custom game metadata only (HTML too large for GitHub API)
+  // Metadata only — HTML stored as separate files in gc-games/
   var cgMeta=(gsGet('gc:custom-games')||[]).map(function(g){
     return {id:g.id,name:g.name,emoji:g.emoji,description:g.description,bg:g.bg,accent:g.accent};
   });
+  // Embed full GH config (including token) so all users can push games/scores
+  var ghConf=gsGet('gc:gh-config')||{};
   return {version:3,updatedAt:Date.now(),users:gsGet('gc:users')||[],
-          invites:gsGet('gc:invites')||[],scores:scores,customGamesMeta:cgMeta};
+          invites:gsGet('gc:invites')||[],scores:scores,customGamesMeta:cgMeta,
+          ghConfig:{owner:ghConf.owner||'',repo:ghConf.repo||'',token:ghConf.token||''}};
 }
 
 // Apply data from GitHub into localStorage
 function applyGhData(d){
   if(!d) return;
+  // Propagate GitHub config to all users — lets any user upload games and sync scores
+  if(d.ghConfig&&d.ghConfig.owner&&d.ghConfig.repo&&d.ghConfig.token){
+    if(!GH.configured()) GH.save(d.ghConfig.owner,d.ghConfig.repo,d.ghConfig.token);
+  }
   // Only apply users if GitHub has actual data — never overwrite local with empty
   if(d.users && d.users.length > 0){
     var localUsers = gsGet('gc:users') || [];
@@ -187,10 +229,27 @@ function applyGhData(d){
   }
 }
 
-// Pull from GitHub then continue — used at boot and login
+// Pull from GitHub then continue — fetches metadata AND any missing game HTML files
 function syncFromGH(){
   if(!GH.configured()) return Promise.resolve();
-  return ghRead().then(function(d){ applyGhData(d); });
+  return ghRead().then(function(d){
+    applyGhData(d);
+    // Now fetch HTML for any games that are missing it locally
+    var games=gsGet('gc:custom-games')||[];
+    var missing=games.filter(function(g){ return !g.html||g.html===''; });
+    if(missing.length===0) return;
+    return Promise.all(missing.map(function(g){
+      return ghReadGameFile(g.id).then(function(html){
+        if(html){
+          g.html=html;
+          // Update in localStorage
+          var all=gsGet('gc:custom-games')||[];
+          var updated=all.map(function(x){ return x.id===g.id?Object.assign({},x,{html:html}):x; });
+          gsSet('gc:custom-games',updated);
+        }
+      });
+    }));
+  });
 }
 
 // Push to GitHub — fire-and-forget after any data change
@@ -312,9 +371,20 @@ function renderBoot(app){
     +'<div id="boot-status" style="font-size:12px;color:rgba(255,255,255,.3);margin-top:4px">Starting...</div>'
     +'</div>';
   setTimeout(function(){
+    // ── FRESH START: clear all local data except GH config ──
+    var ghConfig = gsGet('gc:gh-config');
+    var toRemove = [];
+    for(var i=0; i<localStorage.length; i++){
+      var k = localStorage.key(i);
+      if(k && k.startsWith('gc:') && k !== 'gc:gh-config') toRemove.push(k);
+    }
+    localStorage.removeItem('gc:me');
+    toRemove.forEach(function(k){ localStorage.removeItem(k); });
+    if(ghConfig) gsSet('gc:gh-config', ghConfig);
+    // ── END FRESH START ──
     checkInviteParam();
     var status=document.getElementById('boot-status');
-    if(status) status.textContent=GH.configured()?'Syncing with GitHub...':'Loading...';
+    if(status) status.textContent=GH.configured()?'Syncing...':'Loading...';
     syncFromGH().then(function(){
       S.customGames=gsGet('gc:custom-games')||[];
       var email=localStorage.getItem('gc:me');
@@ -672,6 +742,8 @@ function doSendInvite(){
 ================================================================ */
 function renderUpload(app){
   var custom=S.customGames;
+  var ghOk=GH.configured();
+
   var customList=custom.length===0?''
     :'<div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.12em;text-transform:uppercase;margin-bottom:11px;font-family:Orbitron,monospace">UPLOADED GAMES</div>'
     +'<div style="display:flex;flex-direction:column;gap:9px">'
@@ -693,7 +765,7 @@ function renderUpload(app){
       +'<div class="logo-font" style="font-size:13px;font-weight:700;color:rgba(255,255,255,.5)">MANAGE GAMES</div>'
     +'</div>'
     +'<div style="padding:18px">'
-      +'<p style="color:rgba(255,255,255,.35);font-size:13px;margin-bottom:18px;line-height:1.6">Upload a compatible HTML game file. Games must call <code style="background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px;font-size:11px">window.parent.postMessage</code> with the final score.</p>'
+      +'<p style="color:rgba(255,255,255,.35);font-size:13px;margin-bottom:18px;line-height:1.6">Upload a game and it becomes available to all players. Games must be a single .html file.</p>'
       +'<div id="upl-drop" style="border:2px dashed rgba(255,255,255,.15);border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;margin-bottom:18px;transition:border-color .2s,background .2s">'
         +'<div style="font-size:36px;margin-bottom:10px">&#128193;</div>'
         +'<div style="font-weight:600;font-size:15px;margin-bottom:4px">Drag &amp; drop your game here</div>'
@@ -729,7 +801,10 @@ function renderUpload(app){
       var id=btn.dataset.id;
       var upd=(gsGet('gc:custom-games')||[]).filter(function(g){return g.id!==id;});
       gsSet('gc:custom-games',upd); S.customGames=upd; delete S.scores[id];
-      syncToGH();
+      // Remove from GitHub: delete the game file and update metadata
+      if(GH.configured()){
+        ghDeleteGameFile(id).then(function(){ ghWrite(buildGhData()); });
+      }
       go('upload');
     });
   });
@@ -742,6 +817,7 @@ function processUpload(file){
     statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#f87171;font-size:13px">&#10060; Only .html files are supported.</div>';
     return;
   }
+  statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);color:#38bdf8;font-size:13px">&#8987; Uploading game, please wait...</div>';
   var reader=new FileReader();
   reader.onload=function(ev){
     var html=ev.target.result;
@@ -752,12 +828,18 @@ function processUpload(file){
     var description=(doc.querySelector('meta[name="game-description"]')||{}).content||'A custom game';
     var id='custom-'+name.toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').slice(0,30)+'-'+Date.now().toString(36);
     var gameData={id:id,name:name,emoji:emoji,description:description,html:html,bg:'linear-gradient(135deg,#0f766e,#0d9488)',accent:'#2dd4bf',builtin:false};
+    // Save locally first
     var existing=gsGet('gc:custom-games')||[];
     var updated=existing.filter(function(g){return g.id!==id;}).concat([gameData]);
     gsSet('gc:custom-games',updated); S.customGames=updated; S.scores[id]=[];
-    syncToGH();
-    if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added to the arcade!</div>';
-    setTimeout(function(){ go('upload'); },900);
+    // Push to GitHub: game file + metadata
+    var ghPromise = GH.configured()
+      ? ghWriteGameFile(id, html).then(function(){ return ghWrite(buildGhData()); })
+      : Promise.resolve(true);
+    ghPromise.then(function(ok){
+      if(statusEl) statusEl.innerHTML='<div style="padding:12px 16px;border-radius:11px;margin-bottom:18px;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;font-size:13px">&#10003; "'+esc(name)+'" added to the arcade and available to all players!</div>';
+      setTimeout(function(){ go('upload'); },1400);
+    });
   };
   reader.readAsText(file);
 }
@@ -793,26 +875,25 @@ function renderAdmin(app){
     +'</div>'
     +'<div style="padding:18px;display:flex;flex-direction:column;gap:16px">'
 
-      // ── GITHUB SETUP
+      // ── CLOUD STORAGE
       +'<div class="card" style="border-color:'+(ghConfigured?'rgba(74,222,128,.25)':'rgba(251,191,36,.25)')+';background:'+(ghConfigured?'rgba(74,222,128,.04)':'rgba(251,191,36,.04)')+'">'
-        +'<div style="font-size:11px;color:'+(ghConfigured?'#4ade80':'#fbbf24')+';font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#128279; GITHUB SYNC '+(ghConfigured?'&#10003; CONNECTED':'&#9888; NOT SET UP')+'</div>'
+        +'<div style="font-size:11px;color:'+(ghConfigured?'#4ade80':'#fbbf24')+';font-weight:600;margin-bottom:8px;font-family:Orbitron,monospace;letter-spacing:.08em">&#9729; CLOUD STORAGE '+(ghConfigured?'&#10003; CONNECTED':'&#9888; NOT SET UP')+'</div>'
         +'<p style="font-size:13px;color:rgba(255,255,255,.4);margin:0 0 14px;line-height:1.6">'
           +(ghConfigured
-            ?'Connected to <strong style="color:#f0f0ff">'+esc(GH.owner)+'/'+esc(GH.repo)+'</strong>. All user, invite, and score data syncs to <code style="font-size:11px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px">gc-data.json</code> in your repo. Invite links automatically share these credentials with new users.'
-            :'Connect your GitHub repo so all user accounts and scores are shared across every device. You\'ll need a GitHub Personal Access Token with <strong style="color:#f0f0ff">Contents: Read &amp; Write</strong> permission on this repo.')
+            ?'Cloud storage is active. All user accounts, scores, and games are shared across every device automatically.'
+            :'Set up cloud storage so all players share the same accounts, scores, and games from any device. You will need your storage credentials.')
         +'</p>'
         +(ghConfigured
           ?'<div style="display:flex;gap:8px">'
-              +'<button class="btn btn-ghost btn-full" id="adm-gh-edit" style="padding:11px;font-size:13px">&#9998; Edit Config</button>'
+              +'<button class="btn btn-ghost btn-full" id="adm-gh-edit" style="padding:11px;font-size:13px">&#9998; Edit</button>'
               +'<button class="btn btn-ghost btn-full" id="adm-gh-sync" style="padding:11px;font-size:13px">&#8635; Sync Now</button>'
             +'</div>'
           :'<div style="display:flex;flex-direction:column;gap:10px">'
-              +'<input class="inp" id="gh-owner" placeholder="GitHub username (e.g. ahathaway21)">'
-              +'<input class="inp" id="gh-repo" placeholder="Repository name (e.g. gamecenter)">'
-              +'<input class="inp" id="gh-token" type="password" placeholder="Personal Access Token (ghp_...)">'
-              +'<p style="font-size:11px;color:rgba(255,255,255,.3);margin:0;line-height:1.5">Create a token at github.com &#8594; Settings &#8594; Developer settings &#8594; Personal access tokens &#8594; Fine-grained. Give it Contents: Read &amp; Write on this repo only.</p>'
+              +'<input class="inp" id="gh-owner" placeholder="Account name">'
+              +'<input class="inp" id="gh-repo" placeholder="Storage location name">'
+              +'<input class="inp" id="gh-token" type="password" placeholder="Access key">'
               +'<div id="gh-setup-msg"></div>'
-              +'<button class="btn btn-purple btn-full" id="adm-gh-save" style="padding:12px;font-size:14px">&#128279; Connect GitHub</button>'
+              +'<button class="btn btn-purple btn-full" id="adm-gh-save" style="padding:12px;font-size:14px">&#9729; Connect Cloud Storage</button>'
             +'</div>')
         +'<div id="gh-sync-msg" style="margin-top:8px"></div>'
       +'</div>'
@@ -867,7 +948,7 @@ function renderAdmin(app){
       var t=(document.getElementById('gh-token').value||'').trim();
       var msgEl=document.getElementById('gh-setup-msg');
       if(!o||!r||!t){ msgEl.innerHTML='<p class="err-msg">All three fields are required.</p>'; return; }
-      if(!t.startsWith('ghp_')&&!t.startsWith('github_pat_')){ msgEl.innerHTML='<p class="err-msg">Token should start with ghp_ or github_pat_</p>'; return; }
+      if(!t.startsWith('ghp_')&&!t.startsWith('github_pat_')&&t.length<10){ msgEl.innerHTML='<p class="err-msg">Access key looks too short — please check and try again.</p>'; return; }
       ghSaveBtn.textContent='Testing...'; ghSaveBtn.disabled=true;
       // Test the token with a read of the repo
       fetch('https://api.github.com/repos/'+o+'/'+r,{headers:{'Authorization':'token '+t,'Accept':'application/vnd.github.v3+json'}})
@@ -877,12 +958,12 @@ function renderAdmin(app){
           return ghWrite(buildGhData());
         })
         .then(function(ok){
-          if(!ok) throw new Error('Could not write to gc-data.json. Check token has Contents:Write permission.');
+          if(!ok) throw new Error('Could not save to cloud storage. Check your access key has write permission.');
           renderAdmin(app);
         })
         .catch(function(err){
           if(msgEl) msgEl.innerHTML='<p class="err-msg">&#10060; '+esc(err.message)+'</p>';
-          ghSaveBtn.textContent='&#128279; Connect GitHub'; ghSaveBtn.disabled=false;
+          ghSaveBtn.textContent='&#9729; Connect Cloud Storage'; ghSaveBtn.disabled=false;
         });
     });
   }
@@ -897,7 +978,7 @@ function renderAdmin(app){
       ghSyncBtn.textContent='Syncing...'; ghSyncBtn.disabled=true;
       ghWrite(buildGhData()).then(function(ok){
         ghSyncBtn.textContent='&#8635; Sync Now'; ghSyncBtn.disabled=false;
-        if(msg) msg.innerHTML=ok?'<p class="ok-msg">&#10003; Synced successfully.</p>':'<p class="err-msg">Sync failed. Check your token.</p>';
+        if(msg) msg.innerHTML=ok?'<p class="ok-msg">&#10003; Synced successfully.</p>':'<p class="err-msg">Sync failed. Check your access key.</p>';
       });
     });
   }
@@ -1005,8 +1086,34 @@ function processRestore(file){
 var _currentGame=null, _currentBlobUrl=null;
 
 function launchGame(game){
+  // If HTML is missing locally but GitHub is configured, fetch it first
+  if((!game.html||game.html==='') && GH.configured()){
+    var app=document.getElementById('app');
+    if(app) app.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px">'
+      +'<div class="logo-font" style="font-size:18px;font-weight:700;color:#a78bfa">'+game.emoji+' Loading '+esc(game.name)+'...</div>'
+      +'<div class="spinner"></div>'
+      +'</div>';
+    ghReadGameFile(game.id).then(function(html){
+      if(!html){ alert('This game is not available. Please ask an admin to re-upload it.'); go('hub'); return; }
+      // Cache locally
+      game.html=html;
+      var all=gsGet('gc:custom-games')||[];
+      gsSet('gc:custom-games',all.map(function(x){ return x.id===game.id?Object.assign({},x,{html:html}):x; }));
+      // Also update in S.customGames
+      S.customGames=S.customGames.map(function(x){ return x.id===game.id?Object.assign({},x,{html:html}):x; });
+      doLaunchGame(game, html);
+    });
+    return;
+  }
+  if(!game.html||game.html===''){
+    alert('Game file not available. Please re-upload this game.');
+    return;
+  }
+  doLaunchGame(game, game.html);
+}
+
+function doLaunchGame(game, html){
   _currentGame=game;
-  var html=game.builtin?CAT_BLAST_HTML:game.html;
   if(_currentBlobUrl) URL.revokeObjectURL(_currentBlobUrl);
   var blob=new Blob([html],{type:'text/html'});
   _currentBlobUrl=URL.createObjectURL(blob);
@@ -1052,75 +1159,6 @@ function showScorePanel(game,pts,top5,rank){
   document.getElementById('sp-back').onclick=function(){ closeGameOverlay(); };
   document.getElementById('sp-again').onclick=function(){ document.getElementById('score-panel').classList.remove('active'); document.getElementById('game-iframe').src=_currentBlobUrl; };
 }
-
-/* ================================================================
-   CAT BLAST  — stored as an array of strings, joined at launch
-   (avoids any template-literal or script-tag parsing issues)
-================================================================ */
-var CAT_BLAST_LINES=[
-'<!DOCTYPE html><html lang="en"><head>',
-'<meta charset="UTF-8">',
-'<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">',
-'<meta name="game-name" content="Cat Blast">',
-'<meta name="game-emoji" content="\uD83D\uDC31">',
-'<meta name="game-description" content="Block Blast with 7 cat breeds! Fill rows and columns to clear them.">',
-'<title>Cat Blast</title>',
-'<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">',
-'<style>',
-'*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none}',
-'body{background:#0c0620;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden;font-family:"Fredoka One",cursive;padding:8px 0 0}',
-'#sbar{display:flex;gap:12px;margin-bottom:8px;padding:0 8px;width:100%;justify-content:center}',
-'.sbox{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:5px 22px;text-align:center}',
-'.slbl{font-size:9px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase}',
-'.sval{font-size:1.7rem;color:#FFD700;line-height:1.2}',
-'canvas{display:block;border-radius:10px}',
-'#go{position:fixed;inset:0;background:rgba(5,1,18,.88);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20}',
-'#go.show{display:flex}',
-'.got{font-size:2.2rem;color:#FFD700}',
-'.gos{font-size:3.2rem;color:#fff;line-height:1}',
-'.gob{background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:14px;padding:14px 36px;color:#fff;font-size:1.1rem;font-family:"Fredoka One",cursive;cursor:pointer;margin-top:4px}',
-'</style></head><body>',
-'<div id="sbar"><div class="sbox"><div class="slbl">SCORE</div><div class="sval" id="sel">0</div></div>',
-'<div class="sbox"><div class="slbl">BEST</div><div class="sval" id="bel">0</div></div></div>',
-'<canvas id="bc"></canvas><canvas id="tc" style="margin-top:10px"></canvas>',
-'<div id="go"><div class="got">GAME OVER \uD83D\uDC31</div><div class="gos" id="fs">0</div>',
-'<button class="gob" onclick="restart()">PLAY AGAIN</button></div>',
-'<script>',
-'var GRID=9,CELL=40;',
-'var score=0,best=+(localStorage.getItem("cb:best")||0);',
-'var board=[],pieces=[null,null,null];',
-'var drag=null,dragIdx=-1,dragX=0,dragY=0,prev=null;',
-'var sel=document.getElementById("sel"),bel=document.getElementById("bel");',
-'bel.textContent=best;',
-'var bc=document.getElementById("bc"),tc=document.getElementById("tc");',
-'var bx=bc.getContext("2d"),tx=tc.getContext("2d");',
-'function resize(){var mw=Math.min(window.innerWidth-16,420);CELL=Math.floor(mw/GRID);bc.width=bc.height=CELL*GRID;tc.width=CELL*GRID;tc.height=Math.ceil(CELL*3.2);}',
-'var B=[{n:"Orange Tabby",bg:"#F97316",dt:"#C2410C",ey:"#16A34A",t:"stripe"},{n:"Tuxedo",bg:"#1c1c24",dt:"#FFFFFF",ey:"#22C55E",t:"chest"},{n:"Calico",bg:"#FEF3C7",dt:"#F97316",ey:"#3B82F6",t:"patch"},{n:"Siamese",bg:"#FDE68A",dt:"#78350F",ey:"#60A5FA",t:"point"},{n:"Russian Blue",bg:"#6B7280",dt:"#9CA3AF",ey:"#4ADE80",t:"shim"},{n:"Flame Point",bg:"#F1F5F9",dt:"#F97316",ey:"#93C5FD",t:"flame"},{n:"Snow Bengal",bg:"#F8FAFC",dt:"#475569",ey:"#A78BFA",t:"spot"}];',
-'var SH=[{b:3,c:[[0,0]]},{b:3,c:[[0,0],[0,1],[0,2]]},{b:3,c:[[0,0],[1,0],[2,0]]},{b:3,c:[[0,0],[0,1],[0,2],[0,3]]},{b:3,c:[[0,0],[1,0],[2,0],[3,0]]},{b:0,c:[[0,0],[0,1],[1,1],[1,2]]},{b:0,c:[[0,1],[0,2],[1,0],[1,1]]},{b:0,c:[[0,0],[1,0],[1,1],[2,1]]},{b:0,c:[[0,1],[1,0],[1,1],[2,0]]},{b:1,c:[[0,0],[0,1],[1,0],[1,1]]},{b:1,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]]},{b:1,c:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]]},{b:2,c:[[0,0],[1,0],[1,1]]},{b:2,c:[[0,0],[0,1],[1,0]]},{b:2,c:[[0,0],[1,0],[2,0],[2,1]]},{b:2,c:[[0,0],[0,1],[0,2],[1,0]]},{b:2,c:[[0,2],[1,2],[2,0],[2,1],[2,2]]},{b:2,c:[[0,0],[1,0],[2,0],[0,1],[0,2]]},{b:4,c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]},{b:4,c:[[0,0],[0,1],[0,2],[0,3],[0,4]]},{b:4,c:[[0,0],[1,0],[2,0],[3,0],[4,0]]},{b:5,c:[[0,0],[0,1],[0,2],[1,1]]},{b:5,c:[[0,1],[1,0],[1,1],[2,1]]},{b:5,c:[[0,1],[1,0],[1,1],[1,2],[2,1]]},{b:6,c:[[0,0],[1,0],[2,0],[2,1],[2,2]]},{b:6,c:[[0,0],[0,1],[0,2],[1,2],[2,2]]},{b:6,c:[[0,0],[0,1],[1,0],[2,0],[2,1]]},{b:6,c:[[0,1],[1,1],[2,0],[2,1]]}];',
-'function cat(ctx,px,py,bi,sz){var br=B[bi],r=sz*.12,half=sz*.5;ctx.save();ctx.fillStyle=br.bg;ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.fill();if(br.t==="stripe"){ctx.strokeStyle=br.dt;ctx.lineWidth=Math.max(1,sz*.07);for(var i=0;i<3;i++){ctx.beginPath();ctx.moveTo(px+sz*.18,py+sz*(.22+i*.22));ctx.lineTo(px+sz*.82,py+sz*(.22+i*.22));ctx.stroke();}}else if(br.t==="chest"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+sz*.72,sz*.22,sz*.17,0,0,Math.PI*2);ctx.fill();}else if(br.t==="patch"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.roundRect(px+sz*.54,py+sz*.1,sz*.34,sz*.32,sz*.05);ctx.fill();ctx.fillStyle="#92400E";ctx.beginPath();ctx.roundRect(px+sz*.1,py+sz*.54,sz*.28,sz*.28,sz*.05);ctx.fill();}else if(br.t==="point"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.roundRect(px,py,sz*.38,sz*.38,r);ctx.fill();ctx.beginPath();ctx.roundRect(px+sz*.62,py,sz*.38,sz*.38,r);ctx.fill();ctx.beginPath();ctx.roundRect(px,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();ctx.beginPath();ctx.roundRect(px+sz*.62,py+sz*.62,sz*.38,sz*.38,r);ctx.fill();}else if(br.t==="shim"){ctx.fillStyle=br.dt;ctx.beginPath();ctx.ellipse(px+half,py+half,sz*.3,sz*.36,Math.PI/4,0,Math.PI*2);ctx.fill();}else if(br.t==="flame"){ctx.fillStyle=br.dt;for(var j=0;j<3;j++){ctx.beginPath();ctx.moveTo(px+sz*(.18+j*.28),py);ctx.lineTo(px+sz*(.12+j*.28),py-sz*.12);ctx.lineTo(px+sz*(.34+j*.28),py);ctx.closePath();ctx.fill();}}else if(br.t==="spot"){ctx.fillStyle=br.dt;[[.24,.18],[.62,.13],[.7,.48],[.18,.58],[.52,.62]].forEach(function(p){ctx.beginPath();ctx.ellipse(px+sz*p[0],py+sz*p[1],sz*.07,sz*.05,Math.PI/5,0,Math.PI*2);ctx.fill();});}var ec=bi===1?"#1c1c24":br.dt;ctx.fillStyle=ec;ctx.beginPath();ctx.moveTo(px+sz*.15,py+sz*.1);ctx.lineTo(px+sz*.06,py-sz*.11);ctx.lineTo(px+sz*.33,py+sz*.1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(px+sz*.67,py+sz*.1);ctx.lineTo(px+sz*.94,py-sz*.11);ctx.lineTo(px+sz*.85,py+sz*.1);ctx.closePath();ctx.fill();ctx.fillStyle="rgba(253,164,175,.6)";ctx.beginPath();ctx.moveTo(px+sz*.17,py+sz*.1);ctx.lineTo(px+sz*.1,py-sz*.04);ctx.lineTo(px+sz*.29,py+sz*.1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(px+sz*.71,py+sz*.1);ctx.lineTo(px+sz*.9,py-sz*.04);ctx.lineTo(px+sz*.83,py+sz*.1);ctx.closePath();ctx.fill();var er=Math.max(2,sz*.09);ctx.fillStyle="#111";ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er,0,Math.PI*2);ctx.fill();ctx.fillStyle=br.ey;ctx.beginPath();ctx.arc(px+sz*.3,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px+sz*.7,py+sz*.51,er*.7,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(px+sz*.32,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(px+sz*.72,py+sz*.49,er*.27,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fda4af";ctx.beginPath();ctx.moveTo(px+half,py+sz*.64);ctx.lineTo(px+sz*.46,py+sz*.59);ctx.lineTo(px+sz*.54,py+sz*.59);ctx.closePath();ctx.fill();ctx.strokeStyle="rgba(255,255,255,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(px,py,sz,sz,r);ctx.stroke();ctx.restore();}',
-'function drawBoard(){var S=CELL*GRID;bx.fillStyle="#150b2e";bx.fillRect(0,0,S,S);bx.strokeStyle="rgba(255,255,255,.035)";bx.lineWidth=1;for(var i=0;i<=GRID;i++){bx.beginPath();bx.moveTo(i*CELL,0);bx.lineTo(i*CELL,S);bx.stroke();bx.beginPath();bx.moveTo(0,i*CELL);bx.lineTo(S,i*CELL);bx.stroke();}for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(board[r][c]!==null)cat(bx,c*CELL+1,r*CELL+1,board[r][c],CELL-2);if(prev&&drag){prev.cells.forEach(function(p){var pr=p[0],pc=p[1];if(pr>=0&&pr<GRID&&pc>=0&&pc<GRID){bx.fillStyle=prev.valid?"rgba(255,255,255,.22)":"rgba(255,60,60,.18)";bx.beginPath();bx.roundRect(pc*CELL+1,pr*CELL+1,CELL-2,CELL-2,CELL*.1);bx.fill();}});}if(drag){drag.c.forEach(function(d){var dr=d[0],dc=d[1];var px2=dragX+dc*CELL-drag.w*CELL/2;var py2=dragY+dr*CELL-drag.h*CELL*1.1;cat(bx,px2,py2,drag.b,CELL-2);});}}',
-'function drawTray(){var W=CELL*GRID,H=tc.height;tx.clearRect(0,0,W,H);var sw=Math.floor(W/3);for(var i=0;i<3;i++){if(!pieces[i]||i===dragIdx)continue;var p=pieces[i];var mr=0,mc=0;p.c.forEach(function(x){if(x[0]>mr)mr=x[0];if(x[1]>mc)mc=x[1];});mr++;mc++;var sc=Math.min((sw-14)/(mc*CELL),(H-14)/(mr*CELL),1);var sz=Math.floor((CELL-1)*sc);var ox=Math.floor(sw*i+(sw-mc*sz*1.04)/2);var oy=Math.floor((H-mr*sz*1.04)/2)+4;p.c.forEach(function(x){cat(tx,ox+x[1]*Math.floor(sz*1.04),oy+x[0]*Math.floor(sz*1.04),p.b,sz);});}}',
-'function rp(){var s=SH[Math.floor(Math.random()*SH.length)];var mx=0,my=0;s.c.forEach(function(x){if(x[0]>mx)mx=x[0];if(x[1]>my)my=x[1];});return{b:s.b,c:s.c,h:mx+1,w:my+1};}',
-'function refill(){for(var i=0;i<3;i++)pieces[i]=rp();}',
-'function canPlace(p,row,col){return p.c.every(function(x){var nr=row+x[0],nc=col+x[1];return nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&board[nr][nc]===null;});}',
-'function place(p,row,col){p.c.forEach(function(x){board[row+x[0]][col+x[1]]=p.b;});score+=p.c.length*10;var rc=[],cc=[];for(var r=0;r<GRID;r++)if(board[r].every(function(v){return v!==null;}))rc.push(r);for(var c=0;c<GRID;c++){var full=true;for(var r2=0;r2<GRID;r2++)if(board[r2][c]===null){full=false;break;}if(full)cc.push(c);}var lines=rc.length+cc.length;if(lines>0){rc.forEach(function(r){for(var c=0;c<GRID;c++)board[r][c]=null;});cc.forEach(function(c){for(var r=0;r<GRID;r++)board[r][c]=null;});var bonus=[0,100,250,450,700,1000,1400,1900,2500,3200][Math.min(lines,9)];score+=bonus;}sel.textContent=score;if(score>best){best=score;localStorage.setItem("cb:best",best);bel.textContent=best;}}',
-'function checkOver(){return pieces.every(function(p,i){if(!p||i===dragIdx)return true;for(var r=0;r<GRID;r++)for(var c=0;c<GRID;c++)if(canPlace(p,r,c))return false;return true;});}',
-'function gameOver(){document.getElementById("fs").textContent=score;document.getElementById("go").classList.add("show");try{window.parent.postMessage({type:"GAME_OVER",score:score},"*");}catch(e){}}',
-'function restart(){board=[];for(var r=0;r<GRID;r++){board[r]=[];for(var c=0;c<GRID;c++)board[r][c]=null;}score=0;sel.textContent=0;pieces=[null,null,null];refill();drag=null;dragIdx=-1;prev=null;document.getElementById("go").classList.remove("show");drawBoard();drawTray();}',
-'function cpEvt(canvas,e){var rect=canvas.getBoundingClientRect();var sx=canvas.width/rect.width,sy=canvas.height/rect.height;var cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;return{x:(cx-rect.left)*sx,y:(cy-rect.top)*sy};}',
-'function getTrayIdx(x){var sw=Math.floor(CELL*GRID/3);var i=Math.floor(x/sw);return(i>=0&&i<3&&pieces[i])?i:-1;}',
-'function calcPrev(p,bx2,by2){var col=Math.floor(bx2/CELL)-Math.floor(p.w/2);var row=Math.floor(by2/CELL)-Math.floor(p.h/2);var cells=p.c.map(function(x){return[row+x[0],col+x[1]];});return{valid:canPlace(p,row,col),cells:cells,row:row,col:col};}',
-'tc.addEventListener("mousedown",function(e){var pt=cpEvt(tc,e);var idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];var brect=bc.getBoundingClientRect();var trect=tc.getBoundingClientRect();dragX=(e.clientX-brect.left)*(bc.width/brect.width);dragY=bc.height+(e.clientY-trect.top)*(bc.height/brect.height);drawBoard();drawTray();});',
-'tc.addEventListener("touchstart",function(e){e.preventDefault();var pt=cpEvt(tc,e);var idx=getTrayIdx(pt.x);if(idx<0)return;dragIdx=idx;drag=pieces[idx];var brect=bc.getBoundingClientRect();dragX=(e.touches[0].clientX-brect.left)*(bc.width/brect.width);dragY=(e.touches[0].clientY-brect.top)*(bc.height/brect.height)+CELL*.5;drawBoard();drawTray();},{passive:false});',
-'document.addEventListener("mousemove",function(e){if(!drag)return;var brect=bc.getBoundingClientRect();dragX=(e.clientX-brect.left)*(bc.width/brect.width);dragY=(e.clientY-brect.top)*(bc.height/brect.height);var bx2=dragX,by2=dragY+CELL;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();});',
-'document.addEventListener("touchmove",function(e){if(!drag)return;e.preventDefault();var brect=bc.getBoundingClientRect();dragX=(e.touches[0].clientX-brect.left)*(bc.width/brect.width);dragY=(e.touches[0].clientY-brect.top)*(bc.height/brect.height);var bx2=dragX,by2=dragY+CELL*.6;if(bx2>=0&&bx2<CELL*GRID&&by2>=0&&by2<CELL*GRID)prev=calcPrev(drag,bx2,by2);else prev=null;drawBoard();},{passive:false});',
-'function endDrag(){if(!drag)return;if(prev&&prev.valid){place(drag,prev.row,prev.col);pieces[dragIdx]=null;if(pieces.every(function(p){return!p;}))refill();if(checkOver())setTimeout(gameOver,400);}drag=null;dragIdx=-1;prev=null;drawBoard();drawTray();}',
-'document.addEventListener("mouseup",endDrag);document.addEventListener("touchend",endDrag);',
-'window.addEventListener("resize",function(){resize();drawBoard();drawTray();});',
-'resize();restart();',
-'<\/script></body></html>'
-];
-var CAT_BLAST_HTML=CAT_BLAST_LINES.join('\n');
 
 /* ================================================================
    START
