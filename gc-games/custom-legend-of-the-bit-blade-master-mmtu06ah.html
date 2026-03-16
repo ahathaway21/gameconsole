@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="game-name" content="Legend of the Bit-Blade: Master Quest">
+    <meta name="game-emoji" content="⚔️">
+    <meta name="game-description" content="Level up, shop for upgrades, and master the spin attack in this retro adventure.">
+    <title>Bit-Blade Master Quest</title>
+    <style>
+        :root { --bg: #0d0d15; --gold: #f1c40f; --grass: #1a2e1a; --ui-panel: rgba(15, 15, 25, 0.9); }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: white; font-family: 'Courier New', monospace; overflow: hidden; touch-action: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        canvas { background: var(--grass); border: 4px solid #333; max-width: 95%; max-height: 48vh; image-rendering: pixelated; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        
+        #ui-layer { position: absolute; top: 10px; width: 100%; display: flex; flex-direction: column; align-items: center; pointer-events: none; gap: 5px; }
+        .stats-top { display: flex; justify-content: space-around; width: 100%; }
+        .stat-box { font-weight: bold; font-size: 0.9rem; text-shadow: 2px 2px #000; background: var(--ui-panel); padding: 5px 12px; border: 1px solid #444; border-radius: 4px; }
+        
+        .energy-bar { width: 80%; height: 8px; background: #222; border: 1px solid #444; border-radius: 4px; overflow: hidden; }
+        #energy-fill { width: 0%; height: 100%; background: #3498db; transition: width 0.1s; }
+
+        #controls { width: 100%; flex-grow: 1; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; box-sizing: border-box; background: #151515; border-top: 4px solid #222; }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px); gap: 5px; }
+        .btn { background: #252525; border: 2px solid #444; border-radius: 12px; color: white; display: flex; align-items: center; justify-content: center; user-select: none; touch-action: manipulation; font-weight: bold; box-shadow: 0 4px 0 #000; }
+        .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #000; background: #333; }
+        
+        .action-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .circle-btn { width: 75px; height: 75px; border-radius: 50%; font-size: 0.7rem; text-align: center; }
+        #attack { border-color: #e74c3c; color: #ff7675; }
+        #special { border-color: #3498db; color: #74b9ff; }
+        #item { height: 45px; grid-column: span 2; border-color: #f1c40f; }
+
+        #overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center; padding: 20px; }
+        .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; width: 100%; max-width: 300px; }
+        .menu-btns { position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 21; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui-layer">
+        <div class="stats-top">
+            <div class="stat-box">❤️ <span id="hp">3</span>/<span id="maxHp">5</span></div>
+            <div class="stat-box">⭐ LVL: <span id="rank">1</span></div>
+            <div class="stat-box">💰 <span id="score">0</span></div>
+        </div>
+        <div class="energy-bar"><div id="energy-fill"></div></div>
+    </div>
+
+    <div class="menu-btns">
+        <button class="btn" style="width:40px;height:40px;box-shadow:none" onclick="toggleMute()" id="muteBtn">🔊</button>
+        <button class="btn" style="width:40px;height:40px;box-shadow:none" onclick="togglePause()" id="pauseBtn">⏸️</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="controls">
+        <div class="d-pad">
+            <div></div><div class="btn" id="up">▲</div><div></div>
+            <div class="btn" id="left">◀</div><div></div><div class="btn" id="right">▶</div>
+            <div></div><div class="btn" id="down">▼</div><div></div>
+        </div>
+        <div class="action-btns">
+            <div class="btn circle-btn" id="attack">SWORD</div>
+            <div class="btn circle-btn" id="special">SPIN</div>
+            <div class="btn" id="item">BOOMERANG</div>
+        </div>
+    </div>
+
+    <div id="overlay">
+        <h1 id="overlay-title">BIT-BLADE MASTER</h1>
+        <p id="overlay-sub">Defeat enemies to gain gold for upgrades!</p>
+        <div id="shop-ui" class="shop-grid" style="display:none">
+            <button class="btn" onclick="buy('hp')">HEAL (5💰)</button>
+            <button class="btn" onclick="buy('max')">+MAX HP (15💰)</button>
+            <button class="btn" onclick="buy('spd')">+SPEED (10💰)</button>
+            <button class="btn" onclick="buy('atkhp')">REPAIR (5💰)</button>
+        </div>
+        <button class="btn" style="padding: 15px 40px; margin-top: 20px;" onclick="resetGame()" id="mainBtn">START QUEST</button>
+        <button class="btn" style="margin-top:10px; background:#27ae60!important" onclick="downloadGame()">💾 SAVE AS HTML</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const hpEl = document.getElementById('hp');
+const mHpEl = document.getElementById('maxHp');
+const scoreEl = document.getElementById('score');
+const rankEl = document.getElementById('rank');
+const energyFill = document.getElementById('energy-fill');
+const overlay = document.getElementById('overlay');
+const shopUI = document.getElementById('shop-ui');
+
+canvas.width = 400; canvas.height = 400;
+
+let gameActive = false, paused = false, muted = false, score = 0, rank = 1, energy = 0, shake = 0;
+let enemies = [], drops = [], boomerang = { active: false, x: 0, y: 0, dx: 0, dy: 0, dist: 0, returning: false };
+const player = { x: 200, y: 200, w: 24, h: 24, speed: 2.8, hp: 3, maxHp: 5, dir: 'down', isAttacking: false, attackTimer: 0, invul: 0, isSpinning: false };
+
+const keys = {};
+const touch = { up: false, down: false, left: false, right: false, attack: false, item: false, special: false };
+
+// --- AUDIO ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(f, t, d, v=0.1) {
+    if (muted || !gameActive) return;
+    const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+    o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+    g.gain.setValueAtTime(v, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + d);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + d);
+}
+
+// --- INPUTS ---
+window.addEventListener('keydown', e => { keys[e.code] = true; });
+window.addEventListener('keyup', e => keys[e.code] = false);
+function setupTouch(id, k) {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); touch[k] = true; });
+    el.addEventListener('touchend', e => { e.preventDefault(); touch[k] = false; });
+}
+['up','down','left','right','attack','item','special'].forEach(k => setupTouch(k, k));
+
+// --- SHOP LOGIC ---
+function buy(type) {
+    if(type === 'hp' && score >= 5) { score -= 5; player.hp = player.maxHp; playSound(600,'sine',0.2); }
+    if(type === 'max' && score >= 15) { score -= 15; player.maxHp++; player.hp = player.maxHp; playSound(800,'sine',0.3); }
+    if(type === 'spd' && score >= 10) { score -= 10; player.speed += 0.3; playSound(700,'square',0.2); }
+    updateUI();
+}
+
+function updateUI() {
+    hpEl.innerText = player.hp; mHpEl.innerText = player.maxHp;
+    scoreEl.innerText = score; rankEl.innerText = rank;
+}
+
+// --- CORE ---
+function spawnEnemy(isBoss = false) {
+    const side = Math.floor(Math.random() * 4);
+    let x = side % 2 === 0 ? Math.random()*400 : (side === 1 ? 430 : -30);
+    let y = side % 2 !== 0 ? Math.random()*400 : (side === 0 ? -30 : 430);
+    const isFast = !isBoss && Math.random() < 0.3;
+    enemies.push({ x, y, w: isBoss?64:24, h: isBoss?64:24, hp: isBoss?10+rank*2:1, speed: isBoss?0.8:(isFast?2.0:1.1), color: isBoss?'#8e44ad':(isFast?'#e67e22':'#c0392b'), isBoss, flash: 0 });
+}
+
+function update() {
+    if (!gameActive || paused) return;
+    if (shake > 0) shake--;
+    energy = Math.min(100, energy + 0.1);
+    energyFill.style.width = energy + "%";
+    energyFill.style.background = energy >= 100 ? "#f1c40f" : "#3498db";
+
+    let dx = 0, dy = 0;
+    if (keys['ArrowUp'] || touch.up) { dy = -player.speed; player.dir = 'up'; }
+    else if (keys['ArrowDown'] || touch.down) { dy = player.speed; player.dir = 'down'; }
+    if (keys['ArrowLeft'] || touch.left) { dx = -player.speed; player.dir = 'left'; }
+    else if (keys['ArrowRight'] || touch.right) { dx = player.speed; player.dir = 'right'; }
+    
+    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x + dx));
+    player.y = Math.max(0, Math.min(canvas.height - player.h, player.y + dy));
+
+    if ((keys['KeyE'] || touch.special) && energy >= 100) {
+        player.isSpinning = true; energy = 0; player.invul = 40; playSound(120, 'sawtooth', 0.5);
+        setTimeout(() => player.isSpinning = false, 500);
+    }
+
+    if ((keys['Space'] || touch.attack) && !player.isAttacking) {
+        player.isAttacking = true; player.attackTimer = 12; playSound(200+rank*5, 'square', 0.1);
+    }
+    if (player.attackTimer > 0) player.attackTimer--; else player.isAttacking = false;
+
+    if ((keys['ShiftLeft'] || touch.item) && !boomerang.active) {
+        boomerang.active = true; boomerang.returning = false; boomerang.dist = 0;
+        boomerang.x = player.x; boomerang.y = player.y;
+        const bSpd = 6 + rank/2;
+        if(player.dir==='up'){boomerang.dx=0;boomerang.dy=-bSpd;}
+        else if(player.dir==='down'){boomerang.dx=0;boomerang.dy=bSpd;}
+        else if(player.dir==='left'){boomerang.dx=-bSpd;boomerang.dy=0;}
+        else {boomerang.dx=bSpd;boomerang.dy=0;}
+    }
+
+    if (boomerang.active) {
+        boomerang.x += boomerang.dx; boomerang.y += boomerang.dy; boomerang.dist += 7;
+        if (boomerang.dist > 200) boomerang.returning = true;
+        if (boomerang.returning) {
+            const ang = Math.atan2((player.y+12)-boomerang.y, (player.x+12)-boomerang.x);
+            boomerang.dx = Math.cos(ang)*8; boomerang.dy = Math.sin(ang)*8;
+            if(rectIntersect(boomerang.x, boomerang.y, 16, 16, player.x, player.y, 24, 24)) boomerang.active = false;
+        }
+    }
+
+    if (player.invul > 0) player.invul--;
+
+    enemies.forEach((en, i) => {
+        const a = Math.atan2(player.y - en.y, player.x - en.x);
+        en.x += Math.cos(a) * en.speed; en.y += Math.sin(a) * en.speed;
+        if(en.flash > 0) en.flash--;
+
+        if (player.isAttacking) {
+            const r = 24 + rank*3; let sx = player.x, sy = player.y;
+            if(player.dir==='up') sy-=r; else if(player.dir==='down') sy+=24;
+            if(player.dir==='left') sx-=r; else if(player.dir==='right') sx+=24;
+            if(rectIntersect(sx, sy, 24, 24, en.x, en.y, en.w, en.h)) hitEnemy(en, i, 1);
+        }
+        if (player.isSpinning && rectIntersect(player.x-40, player.y-40, 100, 100, en.x, en.y, en.w, en.h)) hitEnemy(en, i, 2);
+        if (boomerang.active && rectIntersect(boomerang.x, boomerang.y, 20, 20, en.x, en.y, en.w, en.h)) { hitEnemy(en, i, 0.5); boomerang.returning = true; }
+        
+        if (player.invul === 0 && rectIntersect(player.x, player.y, 24, 24, en.x, en.y, en.w, en.h)) {
+            player.hp--; player.invul = 60; shake = 10; updateUI();
+            playSound(100, 'sine', 0.3); if (player.hp <= 0) gameOver();
+        }
+    });
+
+    drops.forEach((d, i) => {
+        if(rectIntersect(player.x, player.y, 24, 24, d.x, d.y, 16, 16)) {
+            player.hp = Math.min(player.maxHp, player.hp+1); updateUI();
+            playSound(700, 'sine', 0.2); drops.splice(i, 1);
+        }
+    });
+
+    if (Math.random() < 0.012 && enemies.length < 5) spawnEnemy();
+    if (score > 0 && score % 20 === 0 && !paused) { paused = true; showShop(); }
+    rank = Math.floor(score/10) + 1; updateUI();
+}
+
+function hitEnemy(en, idx, dmg) {
+    if(en.flash > 0) return; en.flash = 10; en.hp -= dmg;
+    if(en.hp <= 0) {
+        if(Math.random() < 0.2) drops.push({x: en.x, y: en.y});
+        enemies.splice(idx, 1); score++; updateUI();
+        if(score % 10 === 0) spawnEnemy(true);
+    }
+}
+
+function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) { return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1; }
+
+function draw() {
+    ctx.save(); if(shake > 0) ctx.translate(Math.random()*4-2, Math.random()*4-2);
+    ctx.clearRect(0,0,400,400);
+    ctx.fillStyle = "rgba(255,255,255,0.02)";
+    for(let i=0; i<400; i+=40) ctx.fillRect(i,0,1,400), ctx.fillRect(0,i,400,1);
+    
+    drops.forEach(d => { ctx.fillStyle = '#ff4757'; ctx.fillRect(d.x+6, d.y, 4, 16); ctx.fillRect(d.x, d.y+6, 16, 4); });
+    
+    ctx.fillStyle = player.invul % 8 > 4 ? '#fff' : '#2ecc71';
+    ctx.fillRect(player.x, player.y, 24, 24);
+
+    if (player.isAttacking) {
+        ctx.fillStyle = '#f1c40f'; const r = 24 + rank*3;
+        if(player.dir==='up') ctx.fillRect(player.x+4, player.y-r, 16, r);
+        else if(player.dir==='down') ctx.fillRect(player.x+4, player.y+24, 16, r);
+        else if(player.dir==='left') ctx.fillRect(player.x-r, player.y+4, r, 16);
+        else ctx.fillRect(player.x+24, player.y+4, r, 16);
+    }
+    if (player.isSpinning) {
+        ctx.strokeStyle = '#3498db'; ctx.lineWidth = 4; ctx.beginPath();
+        ctx.arc(player.x+12, player.y+12, 50, 0, Math.PI*2); ctx.stroke();
+    }
+    if (boomerang.active) {
+        ctx.fillStyle = '#3498db'; ctx.save(); ctx.translate(boomerang.x+8, boomerang.y+8);
+        ctx.rotate(Date.now()*0.02); ctx.fillRect(-10,-2,20,4); ctx.fillRect(-2,-10,4,20); ctx.restore();
+    }
+    enemies.forEach(en => { ctx.fillStyle = en.flash>0?'#fff':en.color; ctx.fillRect(en.x, en.y, en.w, en.h); });
+    ctx.restore();
+}
+
+function loop() { if(gameActive) { update(); draw(); } requestAnimationFrame(loop); }
+
+function showShop() {
+    overlay.style.display = 'flex'; shopUI.style.display = 'grid';
+    document.getElementById('overlay-title').innerText = "MERCHANT";
+    document.getElementById('overlay-sub').innerText = "Spend your gold on upgrades!";
+    document.getElementById('mainBtn').innerText = "RESUME QUEST";
+}
+
+function togglePause() { paused = !paused; overlay.style.display = paused ? 'flex' : 'none'; shopUI.style.display = 'none'; document.getElementById('overlay-title').innerText = "PAUSED"; }
+function toggleMute() { muted = !muted; document.getElementById('muteBtn').innerText = muted ? '🔇' : '🔊'; }
+
+function gameOver() {
+    gameActive = false; overlay.style.display = 'flex'; shopUI.style.display = 'none';
+    document.getElementById('overlay-title').innerText = "HERO FALLEN";
+    document.getElementById('mainBtn').innerText = "RETRY";
+    window.parent.postMessage({type: "GAME_OVER", score: score}, '*');
+}
+
+function resetGame() {
+    if(gameActive && paused) { paused = false; overlay.style.display = 'none'; return; }
+    player.hp = 3; player.maxHp = 5; player.x = 200; player.y = 200; score = 0; rank = 1; enemies = []; drops = [];
+    gameActive = true; paused = false; overlay.style.display = 'none'; updateUI();
+}
+
+function downloadGame() {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(["<!DOCTYPE html>\n"+document.documentElement.outerHTML], {type:'text/html'}));
+    a.download = 'BitBladeQuest.html'; a.click();
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
