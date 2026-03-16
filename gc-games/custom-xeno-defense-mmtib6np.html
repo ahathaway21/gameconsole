@@ -228,7 +228,42 @@ function snd(t){
     else if(t==='kill'){const o=a.createOscillator();o.connect(g);o.type='sawtooth';o.frequency.setValueAtTime(260,ct);o.frequency.exponentialRampToValueAtTime(40,ct+.13);g.gain.setValueAtTime(.07,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.13);o.start();o.stop(ct+.13);}
     else if(t==='place'){const o=a.createOscillator();o.connect(g);o.type='sine';o.frequency.setValueAtTime(440,ct);o.frequency.setValueAtTime(660,ct+.06);g.gain.setValueAtTime(.1,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.18);o.start();o.stop(ct+.18);}
     else if(t==='wave'){[200,280,380].forEach((f,i)=>{const o=a.createOscillator();o.connect(g);o.type='square';o.frequency.setValueAtTime(f,ct+i*.1);g.gain.setValueAtTime(.06,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.5);o.start(ct+i*.1);o.stop(ct+.5);});}
-    else if(t==='boss'){[80,60,40,25].forEach((f,i)=>{const o=a.createOscillator();o.connect(g);o.type='sawtooth';o.frequency.setValueAtTime(f,ct+i*.18);g.gain.setValueAtTime(.14,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.9);o.start(ct+i*.18);o.stop(ct+.9);});}
+    else if(t==='boss'){
+      // Deep descending war-horn for boss wave start
+      const osc1=a.createOscillator();const osc2=a.createOscillator();
+      const g2=a.createGain();
+      osc1.connect(g2);osc2.connect(g2);g2.connect(a.destination);
+      osc1.type='sawtooth';osc2.type='sawtooth';
+      osc1.frequency.setValueAtTime(110,ct);osc1.frequency.exponentialRampToValueAtTime(40,ct+1.2);
+      osc2.frequency.setValueAtTime(55,ct);osc2.frequency.exponentialRampToValueAtTime(20,ct+1.2);
+      g2.gain.setValueAtTime(.0001,ct);g2.gain.exponentialRampToValueAtTime(.22,ct+.08);
+      g2.gain.setValueAtTime(.22,ct+.5);g2.gain.exponentialRampToValueAtTime(.001,ct+1.4);
+      osc1.start();osc1.stop(ct+1.4);osc2.start();osc2.stop(ct+1.4);
+      // Overlaid noise burst (explosion crack)
+      const buf=a.createBuffer(1,a.sampleRate*.25,a.sampleRate);
+      const dd=buf.getChannelData(0);for(let i=0;i<dd.length;i++)dd[i]=(Math.random()*2-1)*Math.pow(1-i/dd.length,2);
+      const ns=a.createBufferSource();ns.buffer=buf;ns.connect(g);
+      g.gain.setValueAtTime(.28,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.25);
+      ns.start();ns.stop(ct+.25);
+    }
+    else if(t==='swarm'){
+      // Rapid insectoid chittering — ascending chaotic buzz
+      const g2=a.createGain();g2.connect(a.destination);
+      g2.gain.setValueAtTime(.001,ct);g2.gain.exponentialRampToValueAtTime(.18,ct+.05);
+      g2.gain.setValueAtTime(.18,ct+.4);g2.gain.exponentialRampToValueAtTime(.001,ct+.9);
+      // 8 rapid-fire oscillators at insect frequencies
+      for(let i=0;i<8;i++){
+        const o=a.createOscillator();o.connect(g2);o.type='square';
+        const f=400+i*180+Math.random()*120;
+        o.frequency.setValueAtTime(f,ct+i*.07);
+        o.frequency.setValueAtTime(f*1.4,ct+i*.07+.04);
+        o.start(ct+i*.065);o.stop(ct+i*.065+.12);
+      }
+      // Low rumble underneath
+      const lo=a.createOscillator();lo.connect(g2);lo.type='sawtooth';
+      lo.frequency.setValueAtTime(60,ct);lo.frequency.exponentialRampToValueAtTime(180,ct+.8);
+      lo.start();lo.stop(ct+.9);
+    }
     else if(t==='boom'){const buf=a.createBuffer(1,a.sampleRate*.3,a.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.5);const s=a.createBufferSource();s.buffer=buf;s.connect(g);g.gain.setValueAtTime(.3,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.3);s.start();s.stop(ct+.3);}
     else if(t==='unlock'){[440,550,660,880].forEach((f,i)=>{const o=a.createOscillator();o.connect(g);o.type='sine';o.frequency.setValueAtTime(f,ct+i*.07);g.gain.setValueAtTime(.1,ct);g.gain.exponentialRampToValueAtTime(.001,ct+.4);o.start(ct+i*.07);o.stop(ct+.4);});}
     else if(t==='gameover'){[440,330,220,110].forEach((f,i)=>{const o=a.createOscillator();o.connect(g);o.type='sine';o.frequency.setValueAtTime(f,ct+i*.22);g.gain.setValueAtTime(.12,ct);g.gain.exponentialRampToValueAtTime(.001,ct+1.3);o.start(ct+i*.22);o.stop(ct+1.3);});}
@@ -349,11 +384,12 @@ function genWave(wn){
   const boss=wn%5===0;
   const cnt=Math.floor(14+wn*3.5);
   const spd=1+wn*.042;
+  const milestone=1+Math.floor(wn/5)*.10; // +10% HP & speed every 5 waves
   if(boss){
     const b=ED.boss;
-    const bhp=Math.floor(b.bhp*(1+wn*.39));
-    q.push({type:'boss',hp:bhp,mhp:bhp,spd:b.spd*spd});
-    for(let i=0;i<3;i++){const t=ED.tank;const thp=Math.floor(t.bhp*hm*1.4);q.push({type:'tank',hp:thp,mhp:thp,spd:t.spd*spd});}
+    const bhp=Math.floor(b.bhp*(1+wn*.39)*milestone);
+    q.push({type:'boss',hp:bhp,mhp:bhp,spd:b.spd*spd*milestone});
+    for(let i=0;i<3;i++){const t=ED.tank;const thp=Math.floor(t.bhp*hm*1.4*milestone);q.push({type:'tank',hp:thp,mhp:thp,spd:t.spd*spd*milestone});}
   }
   for(let i=0;i<cnt;i++){
     let type='grunt';
@@ -367,8 +403,8 @@ function genWave(wn){
     else if(wn>=3&&r<.22)  type='swarm';
     else if(wn>=2&&r<.36)  type='scout';
     const d=ED[type];
-    const hp=Math.floor(d.bhp*hm);
-    q.push({type,hp,mhp:hp,spd:(d.spd*spd)});
+    const hp=Math.floor(d.bhp*hm*milestone);
+    q.push({type,hp,mhp:hp,spd:(d.spd*spd*milestone)});
   }
   // Shuffle (keep boss in front)
   const bosses=q.filter(e=>e.type==='boss');
@@ -377,19 +413,18 @@ function genWave(wn){
 }
 
 function genSwarmBurst(wn){
-  // Double the count of the lowest-tier alien for this wave
-  // Lowest tier: grunt (early waves), scout (mid), swarm bug (wave 3+)
   const hm=1+wn*.34;
   const spd=1+wn*.042;
+  const milestone=1+Math.floor(wn/5)*.10;
   let baseType='grunt';
   if(wn>=3) baseType='swarm';
   else if(wn>=2) baseType='scout';
   const d=ED[baseType];
-  const burstCnt=Math.floor(14+wn*3.5); // mirrors cnt from genWave — doubles that tier
+  const burstCnt=Math.floor(14+wn*3.5);
   const q=[];
   for(let i=0;i<burstCnt;i++){
-    const hp=Math.floor(d.bhp*hm);
-    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd});
+    const hp=Math.floor(d.bhp*hm*milestone);
+    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd*milestone});
   }
   return q;
 }
@@ -520,7 +555,7 @@ function dmgEnemy(e, d){
 }
 
 function killEnemy(e){
-  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.75);
+  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.5625);
   gold+=rw;score+=rw*3;kills++;
   addPop(e.x,e.y-CELL*.4,`+${rw}`,'#ffd700');
   const n=e.boss?24:7;
@@ -2030,7 +2065,7 @@ function loop(ts){
           document.getElementById('wb-txt').className='boss';
           wb.classList.add('show');
           setTimeout(()=>wb.classList.remove('show'),2000);
-          snd('boss');
+          snd('swarm');
           addPop(CW/2,CH*.35,'⚠ SWARM! ⚠','#ff4400');
         }
       }
