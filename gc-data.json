@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773620259522,
+  "updatedAt": 1773621388177,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -52,6 +52,12 @@
   ],
   "scores": {
     "custom-cat-blast-mms566hr": [
+      {
+        "email": "mary.hathaway@gmail.com",
+        "displayName": "mary.hathaway",
+        "score": 35650,
+        "date": 1773621387819
+      },
       {
         "email": "ahathaway21@gmail.com",
         "displayName": "ahathaway21",
