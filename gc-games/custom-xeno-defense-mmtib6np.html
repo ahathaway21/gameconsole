@@ -276,9 +276,24 @@ const TD={
     desc:'Chain lightning. Hits multiple enemies.'},
   cryo:{id:'cryo',name:'Cryo',em:'❄️',col:'#0a5a8a',cost:150,dmg:20,rng:3.0,rate:1.0,spd:7,splash:1.0,slow:.45,slowDur:2.5,chain:0,pc:'#88ffff',uw:16,
     upg:[{c:120,l:'Deep Freeze',dmg:30,rng:3.6,slow:.28,slowDur:3.8},{c:240,l:'Absolute Zero',dmg:48,rng:4.2,slow:.14,slowDur:5,splash:1.9}],
-    desc:'Slows all enemies in range. Support.'}
+    desc:'Slows all enemies in range. Support.'},
+  mgun:{id:'mgun',name:'Machine Gun',em:'🔫',col:'#2a5a1a',cost:80,dmg:10,rng:2.6,rate:5.5,spd:14,splash:0,slow:0,chain:0,pc:'#ffee44',uw:2,
+    upg:[{c:65,l:'Heavy Barrel',dmg:16,rng:2.9,rate:7},{c:130,l:'Gatling Upgrade',dmg:26,rng:3.3,rate:9.5}],
+    desc:'Blazing fire rate. Shreds scouts and swarms.'},
+  mortar:{id:'mortar',name:'Mortar',em:'🎆',col:'#6a5828',cost:175,dmg:130,rng:4.2,rate:.38,spd:4,splash:1.8,slow:0,chain:0,pc:'#ffaa00',uw:6,
+    upg:[{c:140,l:'Heavy Charge',dmg:200,rng:4.8,splash:2.3},{c:280,l:'White Phosphorus',dmg:320,rng:5.5,splash:3.2}],
+    desc:'Arcing shells with wide splash. Cannot miss clusters.'},
+  railgun:{id:'railgun',name:'Railgun',em:'🔬',col:'#204a6a',cost:240,dmg:220,rng:6.5,rate:.35,spd:0,splash:0,slow:0,chain:0,pc:'#00ffff',uw:10,pierce:true,
+    upg:[{c:200,l:'Sabot Round',dmg:340,rng:7.5,rate:.45},{c:400,l:'Hypersonic Rod',dmg:560,rng:9,rate:.6}],
+    desc:'Pierces ALL enemies in a line instantly.'},
+  emp:{id:'emp',name:'EMP Tower',em:'📡',col:'#3a2a7a',cost:200,dmg:35,rng:3.5,rate:.5,spd:0,splash:0,slow:0,chain:0,pc:'#ff88ff',uw:14,empStun:.0,empDur:2.2,
+    upg:[{c:160,l:'Overload Pulse',dmg:55,rng:4.2,empDur:3.2},{c:320,l:'Cascade EMP',dmg:90,rng:5.0,empDur:4.5}],
+    desc:'Stuns all enemies in range. Strips alien shields.'},
+  drone:{id:'drone',name:'Drone Bay',em:'🛸',col:'#1a4a5a',cost:280,dmg:70,rng:4.0,rate:.7,spd:16,splash:.6,slow:0,chain:0,pc:'#44ffaa',uw:18,
+    upg:[{c:220,l:'Combat Drones',dmg:110,rng:4.6,rate:.9,splash:.9},{c:440,l:'Swarm Protocol',dmg:180,rng:5.4,rate:1.2,splash:1.4}],
+    desc:'Launches homing drones. Effective vs flyers & stealth.'}
 };
-const TORDER=['rifle','sniper','rocket','flamer','arty','tesla','cryo'];
+const TORDER=['rifle','sniper','mgun','rocket','flamer','mortar','arty','railgun','tesla','emp','cryo','drone'];
 
 // ── ENEMY DEFINITIONS ────────────────────────────────
 const ED={
@@ -286,7 +301,12 @@ const ED={
   scout:{name:'Scout',  col:'#cc3388',hpc:'#ff88cc',bhp:60, spd:2.8, rw:18,sz:.28},
   tank: {name:'Tank',   col:'#226633',hpc:'#55ff88',bhp:580,spd:.55, rw:42,sz:.47},
   flyer:{name:'Flyer',  col:'#cc8800',hpc:'#ffcc44',bhp:150,spd:2.1, rw:30,sz:.32,fly:true},
-  boss: {name:'BOSS',   col:'#cc0033',hpc:'#ff6666',bhp:3200,spd:.36,rw:320,sz:.60,boss:true}
+  boss: {name:'BOSS',   col:'#cc0033',hpc:'#ff6666',bhp:3200,spd:.36,rw:320,sz:.60,boss:true},
+  swarm:{name:'Swarm',  col:'#aacc00',hpc:'#ddff44',bhp:28, spd:2.4, rw:8, sz:.20},
+  stealth:{name:'Stealth',col:'#226688',hpc:'#44aaff',bhp:120,spd:1.6, rw:22,sz:.30,stealth:true},
+  berserker:{name:'Berserkr',col:'#cc4400',hpc:'#ff8844',bhp:200,spd:1.0, rw:28,sz:.38},
+  splitter:{name:'Splitter',col:'#44aa22',hpc:'#88ff44',bhp:260,spd:.9,  rw:35,sz:.42},
+  shielded:{name:'Shielded',col:'#3366cc',hpc:'#6699ff',bhp:180,spd:1.2, rw:32,sz:.38,shieldAmt:160}
 };
 
 // ── GAME STATE ───────────────────────────────────────
@@ -295,6 +315,7 @@ let wave,lives,gold,score,kills,goldSpent,builtTowers;
 let unlocked,selType,selTile;
 let towers,enemies,projs,parts,popups,bolts;
 let waving,betTimer,spawnQ,spawnTmr;
+let swarmCooldown,swarmActive;
 let rafId,lastTs,eid;
 let canvas,ctx;
 
@@ -324,10 +345,10 @@ function setupCanvas(){
 // ── WAVE GENERATION ──────────────────────────────────
 function genWave(wn){
   const q=[];
-  const hm=1+wn*.31;
+  const hm=1+wn*.34;
   const boss=wn%5===0;
-  const cnt=Math.floor(13+wn*3.3);
-  const spd=1+wn*.038;
+  const cnt=Math.floor(14+wn*3.5);
+  const spd=1+wn*.042;
   if(boss){
     const b=ED.boss;
     const bhp=Math.floor(b.bhp*(1+wn*.39));
@@ -337,9 +358,14 @@ function genWave(wn){
   for(let i=0;i<cnt;i++){
     let type='grunt';
     const r=Math.random();
-    if(wn>=8&&r<.18)      type='flyer';
-    else if(wn>=4&&r<.26) type='tank';
-    else if(wn>=2&&r<.36) type='scout';
+    if(wn>=15&&r<.10)      type='shielded';
+    else if(wn>=12&&r<.12) type='splitter';
+    else if(wn>=9&&r<.12)  type='berserker';
+    else if(wn>=6&&r<.14)  type='stealth';
+    else if(wn>=8&&r<.22)  type='flyer';
+    else if(wn>=4&&r<.28)  type='tank';
+    else if(wn>=3&&r<.22)  type='swarm';
+    else if(wn>=2&&r<.36)  type='scout';
     const d=ED[type];
     const hp=Math.floor(d.bhp*hm);
     q.push({type,hp,mhp:hp,spd:(d.spd*spd)});
@@ -350,10 +376,30 @@ function genWave(wn){
   return [...bosses,...rest];
 }
 
+function genSwarmBurst(wn){
+  // Double the count of the lowest-tier alien for this wave
+  // Lowest tier: grunt (early waves), scout (mid), swarm bug (wave 3+)
+  const hm=1+wn*.34;
+  const spd=1+wn*.042;
+  let baseType='grunt';
+  if(wn>=3) baseType='swarm';
+  else if(wn>=2) baseType='scout';
+  const d=ED[baseType];
+  const burstCnt=Math.floor(14+wn*3.5); // mirrors cnt from genWave — doubles that tier
+  const q=[];
+  for(let i=0;i<burstCnt;i++){
+    const hp=Math.floor(d.bhp*hm);
+    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd});
+  }
+  return q;
+}
+
 function startWave(){
   wave++;
   spawnQ=genWave(wave);
-  waving=true;spawnTmr=0;
+  // Swarm cooldown counts down each wave
+  if(swarmCooldown>0) swarmCooldown--;
+  waving=true;spawnTmr=0;swarmActive=false;
   const boss=wave%5===0;
   const loc=getLoc(wave);
   document.getElementById('wb-num').textContent=`WAVE ${wave}`;
@@ -385,6 +431,7 @@ function placeTower(col,row){
     type:selType,lvl:0,kills:0,cd:0,angle:-Math.PI/2,
     dmg:def.dmg,rng:def.rng,rate:def.rate,spd:def.spd,
     splash:def.splash,slow:def.slow||0,slowDur:def.slowDur||0,chain:def.chain||0,
+    empDur:def.empDur||0,
     pc:def.pc,col2:def.col
   });
   updGold();addPop(col*CELL+CELL/2,row*CELL+CELL/2,`-${def.cost}G`,'#ffd700');snd('place');
@@ -400,6 +447,7 @@ function doUpgrade(){
   if(u.dmg)t.dmg=u.dmg;if(u.rng)t.rng=u.rng;if(u.rate)t.rate=u.rate;
   if(u.splash)t.splash=u.splash;if(u.chain)t.chain=u.chain;
   if(u.slow!==undefined)t.slow=u.slow;if(u.slowDur)t.slowDur=u.slowDur;
+  if(u.empDur)t.empDur=u.empDur;
   updGold();snd('place');
   for(let i=0;i<12;i++)addPart(t.x,t.y,'#39ff14',1.8,65);
   updSelInfo();
@@ -418,21 +466,30 @@ function doSell(){
 // ── ENEMY LOGIC ──────────────────────────────────────
 function spawnEnemy(d){
   const ed=ED[d.type];
-  enemies.push({
+  const e={
     id:++eid,type:d.type,hp:d.hp,mhp:d.mhp,
     pi:0,x:PATH[0][0]*CELL+CELL/2,y:PATH[0][1]*CELL+CELL/2,
-    spd:d.spd||ed.spd,bspd:d.spd||ed.spd,slwt:0,
+    spd:d.spd||ed.spd,bspd:d.spd||ed.spd,slwt:0,stunt:0,
     col:ed.col,hpc:ed.hpc,sz:ed.sz,
     rw:ed.rw,fly:ed.fly||false,boss:ed.boss||false,
+    stealth:ed.stealth||false,berserk:false,
     animT:Math.random()*Math.PI*2
-  });
+  };
+  if(ed.shieldAmt){e.shield=Math.floor(ed.shieldAmt*(d.hm||1));e.maxShield=e.shield;}
+  enemies.push(e);
 }
 
 function updEnemies(dt){
   for(let i=enemies.length-1;i>=0;i--){
     const e=enemies[i];
     e.animT+=dt*4;
+    if(e.stunt>0){e.stunt-=dt;continue;} // stunned — frozen in place
     if(e.slwt>0){e.slwt-=dt;if(e.slwt<=0){e.slwt=0;e.spd=e.bspd;}}
+    // Berserker rage trigger
+    if(e.type==='berserker'&&!e.berserk&&e.hp<e.mhp*.5){
+      e.berserk=true;e.spd=e.bspd*2.6;e.bspd=e.spd;
+      addPop(e.x,e.y-CELL*.5,'RAGE!','#ff4400');
+    }
     e.pi+=e.spd*dt;
     if(e.pi>=PATH.length-1){
       const dmg=e.boss?5:1;
@@ -449,6 +506,19 @@ function updEnemies(dt){
   }
 }
 
+// Central damage function — handles shields
+function dmgEnemy(e, d){
+  if(e.shield&&e.shield>0){
+    const absorbed=Math.min(e.shield,d);
+    e.shield-=absorbed;
+    const rem=d-absorbed;
+    if(rem>0)e.hp-=rem;
+    if(e.shield<=0){addPop(e.x,e.y-CELL*.3,'SHIELD BROKEN','#ff88ff');e.shield=0;}
+  } else {
+    e.hp-=d;
+  }
+}
+
 function killEnemy(e){
   const rw=e.rw+Math.floor(wave*.8);
   gold+=rw;score+=rw*3;kills++;
@@ -456,6 +526,21 @@ function killEnemy(e){
   const n=e.boss?24:7;
   for(let i=0;i<n;i++)addPart(e.x,e.y,e.hpc,e.boss?2.4:1.3,60);
   snd(e.boss?'boom':'kill');
+  // Splitter spawns 2 scouts on death
+  if(e.type==='splitter'){
+    const ed=ED.scout;
+    const shp=Math.floor(ed.bhp*(1+wave*.27));
+    [-1,1].forEach(offset=>{
+      const mini={type:'scout',hp:shp,mhp:shp,spd:ed.spd*(1+wave*.032)};
+      const spawned={id:++eid,...mini,pi:Math.max(0,e.pi-0.5),
+        x:e.x+offset*CELL*.3,y:e.y,
+        bspd:mini.spd,slwt:0,stunt:0,stealth:false,berserk:false,
+        col:ed.col,hpc:ed.hpc,sz:ed.sz*.85,rw:ed.rw,fly:false,boss:false,
+        animT:Math.random()*Math.PI*2};
+      enemies.push(spawned);
+    });
+    addPop(e.x,e.y-CELL*.6,'SPLITS!','#88ff44');
+  }
   updGold();
   const idx=enemies.findIndex(x=>x.id===e.id);
   if(idx>=0)enemies.splice(idx,1);
@@ -466,16 +551,74 @@ function updTowers(dt){
   towers.forEach(tower=>{
     tower.cd=Math.max(0,tower.cd-dt);
     if(tower.cd>0)return;
-    let target=null,bestPi=-1;
     const rngPx=tower.rng*CELL;
+    const def=TD[tower.type];
+
+    // Find best target — stealth enemies need detection range (drones ignore stealth)
+    let target=null,bestPi=-1;
+    const detectionRng=tower.type==='drone'?rngPx:(1.8*CELL);
     enemies.forEach(e=>{
       if(e.fly&&tower.type==='flamer')return;
+      if(e.stunt>0)return; // don't target stunned
       const dx=e.x-tower.x,dy=e.y-tower.y;
-      if(Math.sqrt(dx*dx+dy*dy)<=rngPx&&e.pi>bestPi){bestPi=e.pi;target=e;}
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist>rngPx)return;
+      if(e.stealth&&dist>detectionRng&&tower.type!=='emp')return; // stealth: must be close
+      if(e.pi>bestPi){bestPi=e.pi;target=e;}
     });
     if(!target)return;
+
     tower.angle=Math.atan2(target.y-tower.y,target.x-tower.x);
     tower.cd=1/tower.rate;
+
+    // ── RAILGUN: instant pierce beam ──
+    if(def.pierce){
+      const angle=tower.angle;
+      const dx2=Math.cos(angle),dy2=Math.sin(angle);
+      const toKill=[];
+      // Flash bolt visuals along the beam
+      addBolt(tower.x,tower.y,tower.x+dx2*rngPx,tower.y+dy2*rngPx);
+      enemies.forEach(e=>{
+        // Project enemy onto beam direction
+        const ex=e.x-tower.x,ey=e.y-tower.y;
+        const proj=ex*dx2+ey*dy2;
+        if(proj<0||proj>rngPx)return;
+        const perp=Math.abs(ex*dy2-ey*dx2);
+        if(perp>e.sz*CELL*1.6)return;
+        dmgEnemy(e,tower.dmg);
+        for(let i=0;i<5;i++)addPart(e.x,e.y,'#00ffff',1.1,50);
+        if(e.hp<=0)toKill.push(e);
+      });
+      toKill.forEach(e=>killEnemy(e));
+      snd('shoot');
+      return;
+    }
+
+    // ── EMP: stun all enemies in range ──
+    if(def.empStun!==undefined){
+      const dur=tower.empDur||def.empDur;
+      const toKill=[];
+      enemies.forEach(e=>{
+        const dx=e.x-tower.x,dy=e.y-tower.y;
+        if(Math.sqrt(dx*dx+dy*dy)>rngPx)return;
+        if(e.stealth)e.stealth=false; // EMP decloaks
+        e.stunt=dur;e.spd=0;
+        if(e.shield&&e.shield>0){e.shield=0;addPop(e.x,e.y-CELL*.3,'SHIELD STRIPPED','#ff88ff');}
+        dmgEnemy(e,tower.dmg);
+        for(let i=0;i<6;i++)addPart(e.x,e.y,'#ff88ff',1.2,40);
+        if(e.hp<=0)toKill.push(e);
+      });
+      toKill.forEach(e=>killEnemy(e));
+      // EMP pulse visual
+      addBolt(tower.x,tower.y,tower.x+rngPx*.8,tower.y);
+      addBolt(tower.x,tower.y,tower.x-rngPx*.8,tower.y);
+      addBolt(tower.x,tower.y,tower.x,tower.y+rngPx*.8);
+      addBolt(tower.x,tower.y,tower.x,tower.y-rngPx*.8);
+      snd('shoot');
+      return;
+    }
+
+    // ── TESLA: chain lightning ──
     if(tower.chain>0){
       const chain=[target];let last=target;
       for(let c=1;c<tower.chain;c++){
@@ -491,22 +634,25 @@ function updTowers(dt){
       }
       const toKill=[];
       chain.forEach((ct,ci)=>{
-        ct.hp-=tower.dmg*(1-.08*ci);
+        dmgEnemy(ct,tower.dmg*(1-.08*ci));
         for(let i=0;i<4;i++)addPart(ct.x,ct.y,'#44aaff',1.0,42);
         if(ci>0)addBolt(chain[ci-1].x,chain[ci-1].y,ct.x,ct.y);
         if(ct.hp<=0)toKill.push(ct);
       });
       addBolt(tower.x,tower.y,chain[0].x,chain[0].y);
       toKill.forEach(e=>killEnemy(e));
-    } else {
-      projs.push({
-        id:++eid,x:tower.x,y:tower.y,tid:target.id,
-        spd:tower.spd*CELL,dmg:tower.dmg,splash:tower.splash*CELL,
-        slow:tower.slow,slowDur:tower.slowDur,pc:tower.pc,
-        sz:tower.type==='arty'?7:tower.type==='rocket'?5:3,
-        trail:[],type:tower.type
-      });
+      snd('shoot');
+      return;
     }
+
+    // ── Standard projectile ──
+    projs.push({
+      id:++eid,x:tower.x,y:tower.y,tid:target.id,
+      spd:tower.spd*CELL,dmg:tower.dmg,splash:tower.splash*CELL,
+      slow:tower.slow,slowDur:tower.slowDur,pc:tower.pc,
+      sz:tower.type==='arty'?7:tower.type==='rocket'?5:tower.type==='mortar'?6:3,
+      trail:[],type:tower.type
+    });
     snd('shoot');
   });
 }
@@ -534,7 +680,7 @@ function explodeProj(p,x,y){
     enemies.forEach(e=>{
       const dx=e.x-x,dy=e.y-y;
       if(Math.sqrt(dx*dx+dy*dy)<=p.splash){
-        e.hp-=p.dmg;
+        dmgEnemy(e,p.dmg);
         if(p.slow>0){e.spd=e.bspd*p.slow;e.slwt=p.slowDur;}
         if(e.hp<=0)toKill.push(e);
       }
@@ -546,7 +692,7 @@ function explodeProj(p,x,y){
   } else {
     const tgt=enemies.find(e=>e.id===p.tid);
     if(tgt){
-      tgt.hp-=p.dmg;
+      dmgEnemy(tgt,p.dmg);
       if(p.slow>0){tgt.spd=tgt.bspd*p.slow;tgt.slwt=p.slowDur;}
       for(let i=0;i<4;i++)addPart(x,y,p.pc,.9,42);
       if(tgt.hp<=0)killEnemy(tgt);
@@ -1079,15 +1225,20 @@ function drawTowers(){
 }
 
 function drawTowerShape(ctx,type,lvl,angle,C){
-  const lc=['#888','#39ff14','#ffd700'][lvl]||'#ffd700'; // level color tint
+  const lc=['#888','#39ff14','#ffd700'][lvl]||'#ffd700';
   switch(type){
-    case 'rifle': drawRifle(ctx,lvl,angle,C,lc); break;
-    case 'sniper': drawSniper(ctx,lvl,angle,C,lc); break;
-    case 'rocket': drawRocket(ctx,lvl,angle,C,lc); break;
-    case 'flamer': drawFlamer(ctx,lvl,angle,C,lc); break;
-    case 'arty':   drawArty(ctx,lvl,angle,C,lc); break;
-    case 'tesla':  drawTesla(ctx,lvl,angle,C,lc); break;
-    case 'cryo':   drawCryo(ctx,lvl,angle,C,lc); break;
+    case 'rifle':   drawRifle(ctx,lvl,angle,C,lc); break;
+    case 'sniper':  drawSniper(ctx,lvl,angle,C,lc); break;
+    case 'rocket':  drawRocket(ctx,lvl,angle,C,lc); break;
+    case 'flamer':  drawFlamer(ctx,lvl,angle,C,lc); break;
+    case 'arty':    drawArty(ctx,lvl,angle,C,lc); break;
+    case 'tesla':   drawTesla(ctx,lvl,angle,C,lc); break;
+    case 'cryo':    drawCryo(ctx,lvl,angle,C,lc); break;
+    case 'mgun':    drawMgun(ctx,lvl,angle,C,lc); break;
+    case 'mortar':  drawMortar(ctx,lvl,angle,C,lc); break;
+    case 'railgun': drawRailgun(ctx,lvl,angle,C,lc); break;
+    case 'emp':     drawEmpTower(ctx,lvl,angle,C,lc); break;
+    case 'drone':   drawDroneBay(ctx,lvl,angle,C,lc); break;
   }
 }
 
@@ -1249,33 +1400,342 @@ function drawCryo(ctx,lvl,angle,C,lc){
   ctx.restore();
 }
 
+function drawMgun(ctx,lvl,angle,C,lc){
+  // Fortified MG nest — concrete wall, tripod mount
+  ctx.fillStyle='#5a5a50';
+  // Concrete blocks
+  rrect(ctx,-C*.38,C*.1,C*.76,C*.24,3);ctx.fill();
+  ctx.strokeStyle='#3a3a30';ctx.lineWidth=.8;ctx.stroke();
+  // Block lines
+  ctx.strokeStyle='#4a4a40';ctx.lineWidth=.5;
+  ctx.beginPath();ctx.moveTo(-C*.12,C*.1);ctx.lineTo(-C*.12,C*.34);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(C*.12,C*.1);ctx.lineTo(C*.12,C*.34);ctx.stroke();
+  // Ammo belt
+  ctx.fillStyle='#a07830';ctx.fillRect(-C*.2,C*.02,C*.4,C*.08);
+  // Gunner helmet
+  ctx.fillStyle='#3d5c1e';ctx.beginPath();ctx.arc(0,-C*.06,C*.14,Math.PI,0);ctx.fill();
+  // Twin barrels
+  ctx.save();ctx.rotate(angle);
+  ctx.fillStyle='#282828';
+  ctx.fillRect(C*.06,-C*.1,C*.38,C*.07);  // top barrel
+  ctx.fillRect(C*.06, C*.03,C*.38,C*.07);  // bottom barrel
+  if(lvl>0){
+    // Flash suppressor rings
+    ctx.strokeStyle='#555';ctx.lineWidth=C*.03;
+    [C*.15,C*.26,C*.37].forEach(rx=>{
+      ctx.beginPath();ctx.arc(rx,-C*.065,C*.05,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.arc(rx, C*.065,C*.05,0,Math.PI*2);ctx.stroke();
+    });
+  }
+  ctx.restore();
+}
+
+function drawMortar(ctx,lvl,angle,C,lc){
+  // Mortar — base plate, bipod legs, tube at angle
+  // Base plate (square steel)
+  ctx.fillStyle='#4a4030';rrect(ctx,-C*.32,C*.1,C*.64,C*.2,4);ctx.fill();
+  ctx.strokeStyle='#2a2018';ctx.lineWidth=.8;ctx.stroke();
+  // Bipod legs
+  ctx.strokeStyle='#3a3020';ctx.lineWidth=C*.05;
+  ctx.beginPath();ctx.moveTo(-C*.1,C*.1);ctx.lineTo(-C*.26,C*.28);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(C*.1,C*.1);ctx.lineTo(C*.26,C*.28);ctx.stroke();
+  // Elevation rod
+  ctx.strokeStyle='#555';ctx.lineWidth=C*.03;
+  ctx.beginPath();ctx.moveTo(-C*.12,-C*.15);ctx.lineTo(-C*.12,C*.1);ctx.stroke();
+  // Mortar tube (angled up-forward)
+  ctx.save();ctx.rotate(angle+Math.PI*.25); // always somewhat upward
+  ctx.fillStyle='#383020';rrect(ctx,-C*.1,-C*.46,C*.2,C*.46,4);ctx.fill();
+  ctx.strokeStyle='#2a2010';ctx.lineWidth=.6;ctx.stroke();
+  // Muzzle ring
+  ctx.strokeStyle='#555';ctx.lineWidth=C*.04;ctx.beginPath();ctx.arc(0,-C*.46,C*.1,0,Math.PI*2);ctx.stroke();
+  if(lvl>0){ctx.fillStyle='#662200';ctx.beginPath();ctx.arc(0,-C*.42,C*.05,0,Math.PI*2);ctx.fill();} // charge
+  ctx.restore();
+}
+
+function drawRailgun(ctx,lvl,angle,C,lc){
+  // Electromagnetic railgun — power capacitors, twin rails
+  // Capacitor bank
+  ctx.fillStyle='#1a2a4a';rrect(ctx,-C*.3,-C*.2,C*.6,C*.4,5);ctx.fill();
+  ctx.strokeStyle='#2244aa';ctx.lineWidth=.8;ctx.stroke();
+  // Capacitor cylinders
+  [[-C*.18,-C*.08],[0,-C*.08],[C*.18,-C*.08],[-C*.18,C*.04],[0,C*.04],[C*.18,C*.04]].forEach(([cx,cy])=>{
+    ctx.fillStyle='#1a3a6a';ctx.strokeStyle='#4466cc';ctx.lineWidth=.5;
+    ctx.beginPath();ctx.arc(cx,cy,C*.07,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#6688ff';ctx.shadowColor='#6688ff';ctx.shadowBlur=4;
+    ctx.beginPath();ctx.arc(cx,cy,C*.03,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  });
+  // Twin rail barrels
+  ctx.save();ctx.rotate(angle);
+  ctx.fillStyle='#0a1a2a';
+  ctx.fillRect(C*.04,-C*.11,C*.46,C*.07); // top rail
+  ctx.fillRect(C*.04, C*.04,C*.46,C*.07); // bottom rail
+  // Rail glow
+  ctx.strokeStyle='#00ffff';ctx.shadowColor='#00ffff';ctx.shadowBlur=8;ctx.lineWidth=.8;
+  ctx.beginPath();ctx.moveTo(C*.04,-C*.075);ctx.lineTo(C*.5,-C*.075);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(C*.04, C*.075);ctx.lineTo(C*.5, C*.075);ctx.stroke();
+  if(lvl>0){ctx.strokeStyle='#88ffff';ctx.lineWidth=C*.06;ctx.beginPath();ctx.moveTo(C*.5,-C*.075);ctx.lineTo(C*.5,C*.075);ctx.stroke();}
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+function drawEmpTower(ctx,lvl,angle,C,lc){
+  // EMP — rotating dish array on pedestal
+  // Pedestal
+  ctx.fillStyle='#2a1a4a';rrect(ctx,-C*.12,C*.0,C*.24,C*.32,4);ctx.fill();
+  ctx.strokeStyle='#441a88';ctx.lineWidth=.8;ctx.stroke();
+  // Dish mount arm
+  ctx.save();ctx.rotate(angle);
+  // Parabolic dish
+  ctx.fillStyle='#1a0a3a';ctx.strokeStyle='#8833cc';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,-C*.24);
+  ctx.bezierCurveTo(C*.22,-C*.24,C*.3,0,C*.18,C*.1);
+  ctx.lineTo(-C*.18,C*.1);
+  ctx.bezierCurveTo(-C*.3,0,-C*.22,-C*.24,0,-C*.24);
+  ctx.fill();ctx.stroke();
+  // Dish center emitter
+  ctx.fillStyle='#cc44ff';ctx.shadowColor='#cc44ff';ctx.shadowBlur=10;
+  ctx.beginPath();ctx.arc(0,-C*.04,C*.06,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  // Feed arm
+  ctx.strokeStyle='#884acc';ctx.lineWidth=C*.03;
+  ctx.beginPath();ctx.moveTo(0,-C*.04);ctx.lineTo(0,-C*.24);ctx.stroke();
+  if(lvl>0){
+    // Extra ring
+    ctx.strokeStyle='#aa66ff';ctx.lineWidth=.8;ctx.beginPath();ctx.arc(0,-C*.04,C*.18,0,Math.PI*2);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDroneBay(ctx,lvl,angle,C,lc){
+  // Drone bay — launch pad with drones in cradles
+  // Launch platform
+  ctx.fillStyle='#0a3a4a';rrect(ctx,-C*.34,-C*.06,C*.68,C*.36,6);ctx.fill();
+  ctx.strokeStyle='#1a6080';ctx.lineWidth=.8;ctx.stroke();
+  // Runway stripes
+  ctx.strokeStyle='#1a8090';ctx.lineWidth=C*.03;ctx.setLineDash([C*.06,C*.06]);
+  ctx.beginPath();ctx.moveTo(-C*.2,C*.12);ctx.lineTo(C*.2,C*.12);ctx.stroke();
+  ctx.setLineDash([]);
+  // Two drone cradles
+  [[-C*.18,C*.0],[C*.18,C*.0]].forEach(([dx,dy])=>{
+    ctx.fillStyle='#082a38';ctx.strokeStyle='#1a5068';ctx.lineWidth=.6;
+    rrect(ctx,dx-C*.1,dy-C*.06,C*.2,C*.12,3);ctx.fill();ctx.stroke();
+    // Drone body
+    ctx.fillStyle='#1a6888';ctx.shadowColor='#44aacc';ctx.shadowBlur=5;
+    ctx.beginPath();ctx.ellipse(dx,dy,C*.09,C*.05,0,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    // Drone propellers
+    ctx.strokeStyle='#44aacc';ctx.lineWidth=.8;
+    [[-1,0],[1,0],[0,-1],[0,1]].forEach(([px,py])=>{
+      ctx.beginPath();ctx.moveTo(dx,dy);ctx.lineTo(dx+px*C*.14,dy+py*C*.06);ctx.stroke();
+      ctx.fillStyle='#88ccee';ctx.beginPath();ctx.arc(dx+px*C*.14,dy+py*C*.06,C*.03,0,Math.PI*2);ctx.fill();
+    });
+  });
+  if(lvl>0){
+    // Launch arc indicator
+    ctx.strokeStyle='rgba(68,170,204,.3)';ctx.lineWidth=1;ctx.setLineDash([2,4]);
+    ctx.beginPath();ctx.arc(0,0,C*.5,angle-0.5,angle+0.5);ctx.stroke();ctx.setLineDash([]);
+  }
+}
+
 // ── ENEMY DRAWING ─────────────────────────────────────
 function drawEnemies(){
   enemies.forEach(e=>{drawEnemy(e);});
 }
 
 function drawEnemy(e){
-  const {x,y,type,hp,mhp,sz,slwt,animT,boss}=e;
+  const {x,y,type,hp,mhp,sz,slwt,stunt,animT,boss,stealth,berserk,shield,maxShield}=e;
   const r=sz*CELL;
   ctx.save();ctx.translate(x,y);
 
+  // Stealth cloak — semi-transparent unless decloaked (stunt or slwt)
+  if(stealth&&!stunt&&!slwt){ctx.globalAlpha=0.32;}
+
   switch(type){
-    case 'grunt': drawGrunt(ctx,r,animT,slwt); break;
-    case 'scout': drawScout(ctx,r,animT,slwt); break;
-    case 'tank':  drawTankAlien(ctx,r,animT,slwt); break;
-    case 'flyer': drawFlyer(ctx,r,animT,slwt); break;
-    case 'boss':  drawBossAlien(ctx,r,animT,slwt); break;
+    case 'grunt':     drawGrunt(ctx,r,animT,slwt); break;
+    case 'scout':     drawScout(ctx,r,animT,slwt); break;
+    case 'tank':      drawTankAlien(ctx,r,animT,slwt); break;
+    case 'flyer':     drawFlyer(ctx,r,animT,slwt); break;
+    case 'boss':      drawBossAlien(ctx,r,animT,slwt); break;
+    case 'swarm':     drawSwarmAlien(ctx,r,animT,slwt); break;
+    case 'stealth':   drawStealthAlien(ctx,r,animT,slwt,stunt); break;
+    case 'berserker': drawBerserker(ctx,r,animT,slwt,berserk); break;
+    case 'splitter':  drawSplitter(ctx,r,animT,slwt); break;
+    case 'shielded':  drawShielded(ctx,r,animT,slwt,shield,maxShield); break;
+  }
+
+  ctx.globalAlpha=1;
+
+  // Stun ring
+  if(stunt>0){
+    ctx.strokeStyle='#ff88ff';ctx.lineWidth=2;ctx.shadowColor='#ff88ff';ctx.shadowBlur=8;
+    ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(0,0,r+3,0,Math.PI*2);ctx.stroke();
+    ctx.setLineDash([]);ctx.shadowBlur=0;
   }
 
   // HP bar
-  const bw=r*2.8,bh=boss?6:3.5,bx=-bw/2,by=-r-bh-3;
+  const bw=r*2.8,bh=boss?6:3.5,bx=-bw/2,by=-r-(shield&&shield>0?bh+3:0)-bh-3;
   ctx.fillStyle='#111';ctx.fillRect(bx,by,bw,bh);
-  const hf=hp/mhp;
+  const hf=Math.max(0,hp/mhp);
   ctx.fillStyle=hf>.5?e.hpc:(hf>.25?'#ffaa00':'#ff3a3a');
   ctx.fillRect(bx,by,bw*hf,bh);
   if(slwt>0){ctx.strokeStyle='#88ffff';ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,bh);}
-
+  // Shield bar
+  if(maxShield&&maxShield>0){
+    const sby=by-bh-3;const sf=Math.max(0,(shield||0)/maxShield);
+    ctx.fillStyle='#111';ctx.fillRect(bx,sby,bw,bh);
+    ctx.fillStyle='#6699ff';ctx.shadowColor='#6699ff';ctx.shadowBlur=4;
+    ctx.fillRect(bx,sby,bw*sf,bh);ctx.shadowBlur=0;
+    ctx.strokeStyle='#4477ff';ctx.lineWidth=.5;ctx.strokeRect(bx,sby,bw,bh);
+  }
   ctx.restore();
+}
+
+// ── NEW ALIEN DRAW FUNCTIONS ──────────────────────────
+
+function drawSwarmAlien(ctx,r,t,slw){
+  // Tiny bug — angular, fast-looking
+  const bob=Math.sin(t*1.5)*r*.1;
+  ctx.fillStyle=slw>0?'#88aa44':'#aacc00';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=5;
+  // Carapace
+  ctx.beginPath();ctx.ellipse(0,bob,r*.55,r*.4,0,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
+  // Wing pattern
+  ctx.strokeStyle='#668800';ctx.lineWidth=.5;
+  ctx.beginPath();ctx.moveTo(-r*.3,bob-r*.1);ctx.lineTo(-r*.55,bob-r*.35);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(r*.3,bob-r*.1);ctx.lineTo(r*.55,bob-r*.35);ctx.stroke();
+  // Compound eyes
+  [[-r*.22,-r*.18+bob],[r*.22,-r*.18+bob]].forEach(([ex,ey])=>{
+    ctx.fillStyle='#ff2200';ctx.shadowColor='#ff4400';ctx.shadowBlur=4;
+    ctx.beginPath();ctx.arc(ex,ey,r*.14,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(ex,ey,r*.06,0,Math.PI*2);ctx.fill();
+  });
+  // Antennae
+  ctx.strokeStyle='#88aa00';ctx.lineWidth=.7;
+  ctx.beginPath();ctx.moveTo(-r*.1,-r*.18+bob);ctx.lineTo(-r*.25,-r*.5+bob+Math.sin(t)*r*.08);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(r*.1,-r*.18+bob);ctx.lineTo(r*.25,-r*.5+bob-Math.sin(t)*r*.08);ctx.stroke();
+  // 4 legs
+  ctx.strokeStyle='#669900';ctx.lineWidth=r*.1;
+  [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([sx,sy],i)=>{
+    const swing=Math.sin(t*1.5+i)*r*.1;
+    ctx.beginPath();ctx.moveTo(sx*r*.3,sy*r*.08+bob);ctx.lineTo(sx*r*.58,sy*r*.28+bob+swing);ctx.stroke();
+  });
+}
+
+function drawStealthAlien(ctx,r,t,slw,stun){
+  // Shimmering cloaked form — only outline visible when cloaked
+  const bob=Math.sin(t*.7)*r*.06;
+  // Ripple distortion rings (cloaking shimmer)
+  if(!stun&&!slw){
+    ctx.strokeStyle=`hsla(${200+Math.sin(t*2)*30},80%,70%,0.5)`;ctx.lineWidth=1;
+    for(let ri=0;ri<3;ri++){
+      ctx.beginPath();ctx.arc(0,bob,r*(0.4+ri*.22)+Math.sin(t+ri)*r*.05,0,Math.PI*2);ctx.stroke();
+    }
+  }
+  // Sleek elongated body
+  ctx.fillStyle=stun?'#44aaff':(slw?'#88cccc':'#226688');
+  ctx.strokeStyle=stun?'#88ccff':'#44aacc';ctx.lineWidth=1;
+  ctx.beginPath();ctx.ellipse(0,r*.1+bob,r*.3,r*.55,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // Large single eye (cyclops)
+  ctx.fillStyle='#001122';ctx.beginPath();ctx.ellipse(0,-r*.25+bob,r*.22,r*.3,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=stun?'#ff88ff':'#00aaff';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=10;
+  ctx.beginPath();ctx.arc(0,-r*.18+bob,r*.15,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  ctx.fillStyle='#000';ctx.beginPath();ctx.arc(0,-r*.18+bob,r*.07,0,Math.PI*2);ctx.fill();
+  // Thin arms
+  ctx.strokeStyle='#336688';ctx.lineWidth=r*.14;
+  ctx.beginPath();ctx.moveTo(-r*.22,r*.06+bob);ctx.lineTo(-r*.5,r*.3+bob+Math.sin(t)*r*.08);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(r*.22,r*.06+bob);ctx.lineTo(r*.5,r*.3+bob-Math.sin(t)*r*.08);ctx.stroke();
+}
+
+function drawBerserker(ctx,r,t,slw,berserk){
+  // Hunched muscular alien — rage veins when berserk
+  const bob=Math.sin(t*.9)*r*.05;
+  const col=berserk?'#ff4400':(slw?'#888844':'#cc4400');
+  // Massive hunched torso
+  ctx.fillStyle=col;ctx.shadowColor=berserk?'#ff6600':'transparent';ctx.shadowBlur=berserk?14:0;
+  ctx.beginPath();ctx.ellipse(0,r*.12+bob,r*.52,r*.58,0,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  // Spinal ridge
+  ctx.strokeStyle=berserk?'#ffaa44':'#884400';ctx.lineWidth=r*.12;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(0,r*.62+bob);ctx.lineTo(0,-r*.2+bob);ctx.stroke();
+  // Berserk vein glow
+  if(berserk){
+    ctx.strokeStyle='#ff2200';ctx.lineWidth=.8;ctx.shadowColor='#ff4400';ctx.shadowBlur=4;
+    [[-r*.2,r*.1],[r*.2,r*.1],[0,r*.35],[-r*.3,r*.35],[r*.3,r*.35]].forEach(([vx,vy])=>{
+      ctx.beginPath();ctx.moveTo(vx,vy+bob);ctx.lineTo(vx+r*.15,vy-r*.15+bob);ctx.stroke();
+    });ctx.shadowBlur=0;
+  }
+  // Head — low brow, angry
+  ctx.fillStyle=berserk?'#ff5500':'#aa3300';
+  ctx.beginPath();ctx.ellipse(0,-r*.28+bob,r*.36,r*.28,0,0,Math.PI*2);ctx.fill();
+  // Brow ridge
+  ctx.fillStyle=berserk?'#ff3300':'#882200';ctx.beginPath();ctx.ellipse(0,-r*.44+bob,r*.32,r*.08,0,0,Math.PI*2);ctx.fill();
+  // Red eyes
+  [[-r*.15,-r*.32+bob],[r*.15,-r*.32+bob]].forEach(([ex,ey])=>{
+    ctx.fillStyle='#ffff00';ctx.shadowColor='#ffaa00';ctx.shadowBlur=berserk?10:4;
+    ctx.beginPath();ctx.arc(ex,ey,r*.1,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  });
+  // Clawed arms
+  const swing=Math.sin(t)*r*(berserk?.3:.15);
+  ctx.strokeStyle=col;ctx.lineWidth=r*.28;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-r*.42,r*.08+bob);ctx.lineTo(-r*.7,r*.4+bob+swing);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(r*.42,r*.08+bob);ctx.lineTo(r*.7,r*.4+bob-swing);ctx.stroke();
+  // Claws
+  [-1,1].forEach(s=>{const cx2=s*r*.7,cy2=r*.4+bob+(s===1?-swing:swing);ctx.strokeStyle='#222';ctx.lineWidth=r*.1;
+    for(let c=0;c<3;c++){ctx.beginPath();ctx.moveTo(cx2,cy2);ctx.lineTo(cx2+s*r*(.12+c*.05),cy2+r*.14);ctx.stroke();}});
+}
+
+function drawSplitter(ctx,r,t,slw){
+  // Blob with visible split seam — like a cell about to divide
+  const bob=Math.sin(t*.7)*r*.05;
+  const split=Math.sin(t*.5)*r*.04; // seam pulsing
+  // Left half
+  ctx.fillStyle=slw?'#669944':'#44aa22';ctx.shadowColor='#66cc44';ctx.shadowBlur=8;
+  ctx.beginPath();ctx.ellipse(-r*.14+bob,0,r*.44,r*.56,0,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  // Right half
+  ctx.fillStyle=slw?'#558833':'#339911';
+  ctx.beginPath();ctx.ellipse(r*.14+bob,0,r*.44,r*.56,0,0,Math.PI*2);ctx.fill();
+  // Seam line
+  ctx.strokeStyle='#111';ctx.lineWidth=r*.1;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(0,-r*.55+bob);ctx.bezierCurveTo(split,-r*.2+bob,-split,r*.2+bob,0,r*.55+bob);ctx.stroke();
+  // Two eyes (one per half)
+  [[-r*.22,-.2*r],[r*.22,-.2*r]].forEach(([ex,ey])=>{
+    ctx.fillStyle='#ff8800';ctx.shadowColor='#ffaa00';ctx.shadowBlur=6;
+    ctx.beginPath();ctx.arc(ex+bob*.3,ey,r*.16,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(ex+bob*.3,ey,r*.08,0,Math.PI*2);ctx.fill();
+  });
+  // DNA split symbol on body
+  ctx.strokeStyle='rgba(200,255,100,.5)';ctx.lineWidth=r*.08;
+  ctx.beginPath();ctx.moveTo(-r*.2,-r*.1+bob);ctx.bezierCurveTo(r*.1,-r*.05+bob,-r*.1,r*.05+bob,r*.2,r*.1+bob);ctx.stroke();
+}
+
+function drawShielded(ctx,r,t,slw,shield,maxShield){
+  // Standard alien body with energy shield dome
+  const bob=Math.sin(t*.8)*r*.06;
+  // Body — bluish humanoid
+  ctx.fillStyle=slw?'#446688':'#3366cc';ctx.strokeStyle='#5588ee';ctx.lineWidth=.8;
+  ctx.beginPath();ctx.ellipse(0,r*.2+bob,r*.28,r*.44,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // Head
+  ctx.fillStyle=slw?'#5577aa':'#4477dd';
+  ctx.beginPath();ctx.ellipse(0,-r*.2+bob,r*.3,r*.28,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+  // Eyes
+  [[-r*.14,-r*.24+bob],[r*.14,-r*.24+bob]].forEach(([ex,ey])=>{
+    ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(ex,ey,r*.1,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#0044ff';ctx.beginPath();ctx.arc(ex,ey,r*.06,0,Math.PI*2);ctx.fill();
+  });
+  // Hexagonal shield (only when shield > 0)
+  if(shield&&shield>0){
+    const sf=shield/maxShield;
+    const hex=r*(0.88+Math.sin(t*2)*0.04);
+    ctx.strokeStyle=`rgba(100,160,255,${0.4+sf*.5})`;ctx.lineWidth=2;
+    ctx.shadowColor='#6699ff';ctx.shadowBlur=10;
+    ctx.beginPath();
+    for(let hi=0;hi<6;hi++){const ha=hi/6*Math.PI*2-Math.PI/6;ctx.lineTo(Math.cos(ha)*hex,Math.sin(ha)*hex+bob*.3);}
+    ctx.closePath();ctx.stroke();
+    // Shield fill
+    ctx.fillStyle=`rgba(80,120,255,${sf*.18})`;ctx.fill();
+    ctx.shadowBlur=0;
+    // Shield hex facets
+    ctx.strokeStyle=`rgba(120,180,255,${sf*.3})`;ctx.lineWidth=.5;
+    for(let hi=0;hi<6;hi++){const ha=hi/6*Math.PI*2-Math.PI/6,nb=(hi+1)%6,nha=nb/6*Math.PI*2-Math.PI/6;
+      ctx.beginPath();ctx.moveTo(0,bob*.3);ctx.lineTo(Math.cos(ha)*hex,Math.sin(ha)*hex+bob*.3);ctx.stroke();}
+  }
 }
 
 function drawGrunt(ctx,r,t,slw){
@@ -1548,7 +2008,32 @@ function loop(ts){
   if(gs==='playing'){
     if(waving){
       spawnTmr-=dt;
-      if(spawnTmr<=0&&spawnQ.length>0){spawnEnemy(spawnQ.shift());spawnTmr=.57;}
+      if(spawnTmr<=0&&spawnQ.length>0){spawnEnemy(spawnQ.shift());spawnTmr=.54;}
+      // Random swarm trigger: wave>5, cooldown expired, not yet triggered this wave
+      // Fires when spawn queue is 30–70% depleted (mid-wave) at ~35% random chance
+      if(!swarmActive&&wave>5&&swarmCooldown<=0&&spawnQ.length>0){
+        const totalForWave=Math.floor(14+wave*3.5);
+        const spawned=totalForWave-spawnQ.length;
+        const pct=spawned/totalForWave;
+        if(pct>=0.3&&pct<=0.7&&Math.random()<0.0028){ // ~0.28% per frame ≈ 35% over the mid-wave window
+          swarmActive=true;
+          swarmCooldown=3; // 3 waves before next swarm can trigger
+          const burst=genSwarmBurst(wave);
+          // Inject burst into front of spawn queue for immediate pressure
+          spawnQ.unshift(...burst);
+          // Alert banner
+          const wb=document.getElementById('wbanner');
+          document.getElementById('wb-num').textContent='⚠ SWARM ⚠';
+          document.getElementById('wb-loc').textContent='ALIEN SURGE';
+          document.getElementById('wb-sub').textContent='Reinforcements incoming!';
+          document.getElementById('wb-txt').textContent='SWARM INCOMING!';
+          document.getElementById('wb-txt').className='boss';
+          wb.classList.add('show');
+          setTimeout(()=>wb.classList.remove('show'),2000);
+          snd('boss');
+          addPop(CW/2,CH*.35,'⚠ SWARM! ⚠','#ff4400');
+        }
+      }
       if(spawnQ.length===0&&enemies.length===0)waveEnd();
     } else if(betTimer>0){
       betTimer-=dt;
@@ -1672,7 +2157,8 @@ function startGame(){
   document.getElementById('hud').style.display='flex';
   document.getElementById('cw').style.display='flex';
   document.getElementById('btm').style.display='block';
-  wave=0;lives=20;gold=165;score=0;kills=0;goldSpent=0;builtTowers=0;
+  wave=0;lives=20;gold=330;score=0;kills=0;goldSpent=0;builtTowers=0;
+  swarmCooldown=0;swarmActive=false;
   unlocked=new Set(['rifle','sniper']);selType=null;selTile=null;
   towers=[];enemies=[];projs=[];parts=[];popups=[];bolts=[];
   waving=false;betTimer=0;spawnQ=[];spawnTmr=0;lastTs=0;eid=0;
