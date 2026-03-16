@@ -421,10 +421,11 @@ function genSwarmBurst(wn){
   else if(wn>=2) baseType='scout';
   const d=ED[baseType];
   const burstCnt=Math.floor(14+wn*3.5);
+  const swarmBoost=baseType==='swarm'?1.2:1.0; // 20% harder when it's a true swarm event
   const q=[];
   for(let i=0;i<burstCnt;i++){
-    const hp=Math.floor(d.bhp*hm*milestone);
-    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd*milestone});
+    const hp=Math.floor(d.bhp*hm*milestone*swarmBoost);
+    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd*milestone*swarmBoost});
   }
   return q;
 }
