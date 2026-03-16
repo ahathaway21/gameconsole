@@ -332,16 +332,16 @@ const TORDER=['rifle','sniper','mgun','rocket','flamer','mortar','arty','railgun
 
 // ── ENEMY DEFINITIONS ────────────────────────────────
 const ED={
-  grunt:{name:'Grunt',  col:'#9944cc',hpc:'#cc88ff',bhp:90, spd:1.1, rw:12,sz:.37},
-  scout:{name:'Scout',  col:'#cc3388',hpc:'#ff88cc',bhp:60, spd:2.8, rw:18,sz:.28},
-  tank: {name:'Tank',   col:'#226633',hpc:'#55ff88',bhp:580,spd:.55, rw:42,sz:.47},
-  flyer:{name:'Flyer',  col:'#cc8800',hpc:'#ffcc44',bhp:150,spd:2.1, rw:30,sz:.32,fly:true},
-  boss: {name:'BOSS',   col:'#cc0033',hpc:'#ff6666',bhp:3200,spd:.36,rw:320,sz:.60,boss:true},
-  swarm:{name:'Swarm',  col:'#aacc00',hpc:'#ddff44',bhp:37, spd:3.17, rw:8, sz:.20},
-  stealth:{name:'Stealth',col:'#226688',hpc:'#44aaff',bhp:120,spd:1.6, rw:22,sz:.30,stealth:true},
-  berserker:{name:'Berserkr',col:'#cc4400',hpc:'#ff8844',bhp:200,spd:1.0, rw:28,sz:.38},
-  splitter:{name:'Splitter',col:'#44aa22',hpc:'#88ff44',bhp:260,spd:.9,  rw:35,sz:.42},
-  shielded:{name:'Shielded',col:'#3366cc',hpc:'#6699ff',bhp:180,spd:1.2, rw:32,sz:.38,shieldAmt:160}
+  grunt:    {name:'Grunt',   col:'#9944cc',hpc:'#cc88ff',bhp:90,  spd:1.1,  rw:12, sz:.37, introWave:1},
+  scout:    {name:'Scout',   col:'#cc3388',hpc:'#ff88cc',bhp:60,  spd:2.8,  rw:18, sz:.28, introWave:2},
+  tank:     {name:'Tank',    col:'#226633',hpc:'#55ff88',bhp:580, spd:.55,  rw:42, sz:.47, introWave:4},
+  flyer:    {name:'Flyer',   col:'#cc8800',hpc:'#ffcc44',bhp:150, spd:2.1,  rw:30, sz:.32, introWave:8,  fly:true},
+  boss:     {name:'BOSS',    col:'#cc0033',hpc:'#ff6666',bhp:3200,spd:.36,  rw:320,sz:.60, introWave:5,  boss:true},
+  swarm:    {name:'Swarm',   col:'#aacc00',hpc:'#ddff44',bhp:37,  spd:3.17, rw:8,  sz:.20, introWave:3},
+  stealth:  {name:'Stealth', col:'#226688',hpc:'#44aaff',bhp:120, spd:1.6,  rw:22, sz:.30, introWave:6,  stealth:true},
+  berserker:{name:'Berserkr',col:'#cc4400',hpc:'#ff8844',bhp:200, spd:1.0,  rw:28, sz:.38, introWave:9},
+  splitter: {name:'Splitter',col:'#44aa22',hpc:'#88ff44',bhp:260, spd:.9,   rw:35, sz:.42, introWave:12},
+  shielded: {name:'Shielded',col:'#3366cc',hpc:'#6699ff',bhp:180, spd:1.2,  rw:32, sz:.38, introWave:15, shieldAmt:160}
 };
 
 // ── GAME STATE ───────────────────────────────────────
@@ -378,18 +378,26 @@ function setupCanvas(){
 }
 
 // ── WAVE GENERATION ──────────────────────────────────
+// Per-enemy milestone multiplier: +10% for every 5 waves since the enemy was introduced
+function enemyMilestone(type, wn){
+  const intro=ED[type].introWave||1;
+  const steps=Math.floor(Math.max(0, wn-intro)/5);
+  return Math.pow(1.1, steps);
+}
+
 function genWave(wn){
   const q=[];
   const hm=1+wn*.34;
   const boss=wn%5===0;
   const cnt=Math.floor(14+wn*3.5);
   const spd=1+wn*.042;
-  const milestone=1+Math.floor(wn/5)*.10; // +10% HP & speed every 5 waves
   if(boss){
     const b=ED.boss;
-    const bhp=Math.floor(b.bhp*(1+wn*.39)*milestone);
-    q.push({type:'boss',hp:bhp,mhp:bhp,spd:b.spd*spd*milestone});
-    for(let i=0;i<3;i++){const t=ED.tank;const thp=Math.floor(t.bhp*hm*1.4*milestone);q.push({type:'tank',hp:thp,mhp:thp,spd:t.spd*spd*milestone});}
+    const bm=enemyMilestone('boss',wn);
+    const bhp=Math.floor(b.bhp*(1+wn*.39)*bm);
+    q.push({type:'boss',hp:bhp,mhp:bhp,spd:b.spd*spd*bm});
+    const tm=enemyMilestone('tank',wn);
+    for(let i=0;i<3;i++){const t=ED.tank;const thp=Math.floor(t.bhp*hm*1.4*tm);q.push({type:'tank',hp:thp,mhp:thp,spd:t.spd*spd*tm});}
   }
   for(let i=0;i<cnt;i++){
     let type='grunt';
@@ -403,8 +411,9 @@ function genWave(wn){
     else if(wn>=3&&r<.22)  type='swarm';
     else if(wn>=2&&r<.36)  type='scout';
     const d=ED[type];
-    const hp=Math.floor(d.bhp*hm*milestone);
-    q.push({type,hp,mhp:hp,spd:(d.spd*spd*milestone)});
+    const em=enemyMilestone(type,wn);
+    const hp=Math.floor(d.bhp*hm*em);
+    q.push({type,hp,mhp:hp,spd:(d.spd*spd*em)});
   }
   // Shuffle (keep boss in front)
   const bosses=q.filter(e=>e.type==='boss');
@@ -415,17 +424,17 @@ function genWave(wn){
 function genSwarmBurst(wn){
   const hm=1+wn*.34;
   const spd=1+wn*.042;
-  const milestone=1+Math.floor(wn/5)*.10;
   let baseType='grunt';
   if(wn>=3) baseType='swarm';
   else if(wn>=2) baseType='scout';
   const d=ED[baseType];
   const burstCnt=Math.floor(14+wn*3.5);
-  const swarmBoost=baseType==='swarm'?1.2:1.0; // 20% harder when it's a true swarm event
+  const em=enemyMilestone(baseType,wn);
+  const swarmBoost=baseType==='swarm'?1.2:1.0;
   const q=[];
   for(let i=0;i<burstCnt;i++){
-    const hp=Math.floor(d.bhp*hm*milestone*swarmBoost);
-    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd*milestone*swarmBoost});
+    const hp=Math.floor(d.bhp*hm*em*swarmBoost);
+    q.push({type:baseType,hp,mhp:hp,spd:d.spd*spd*em*swarmBoost});
   }
   return q;
 }
@@ -556,7 +565,7 @@ function dmgEnemy(e, d){
 }
 
 function killEnemy(e){
-  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.5625*(e.type==='swarm'?0:1));
+  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.4556*(e.type==='swarm'?0:1));
   gold+=rw;score+=rw*3;kills++;
   addPop(e.x,e.y-CELL*.4,`+${rw}`,'#ffd700');
   const n=e.boss?24:7;
@@ -2085,7 +2094,7 @@ function loop(ts){
 
 function waveEnd(){
   waving=false;
-  const bonus=120+wave*35;
+  const bonus=Math.floor((120+wave*35)*.9);
   gold+=bonus;score+=bonus;updGold();
   addPop(CW/2,CH*.4,`WAVE CLEAR +${bonus}`,'#39ff14');
   // Check tower unlocks
