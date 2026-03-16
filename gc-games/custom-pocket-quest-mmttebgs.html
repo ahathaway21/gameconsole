@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+
+<meta name="game-name" content="Pocket Quest">
+<meta name="game-emoji" content="🗡️">
+<meta name="game-description" content="Explore, fight enemies, collect hearts and survive in a tiny Zelda‑style adventure.">
+
+<title>Pocket Quest</title>
+
+<style>
+html,body{
+margin:0;
+padding:0;
+background:#0b1220;
+color:white;
+font-family:sans-serif;
+overflow:hidden;
+touch-action:none;
+}
+
+canvas{
+display:block;
+margin:auto;
+background:#1b2a34;
+}
+
+#topUI{
+position:fixed;
+top:10px;
+left:10px;
+display:flex;
+gap:10px;
+z-index:5;
+}
+
+button{
+border:none;
+border-radius:10px;
+padding:8px 12px;
+font-size:18px;
+background:#1f2937;
+color:white;
+}
+
+#controls{
+position:fixed;
+bottom:20px;
+left:0;
+right:0;
+display:flex;
+justify-content:space-between;
+padding:0 25px;
+}
+
+#joystick{
+width:120px;
+height:120px;
+border-radius:50%;
+background:#1f2937aa;
+position:relative;
+}
+
+#stick{
+width:55px;
+height:55px;
+border-radius:50%;
+background:#4b5563;
+position:absolute;
+left:32px;
+top:32px;
+}
+
+#attack{
+width:90px;
+height:90px;
+border-radius:50%;
+background:#991b1b;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:30px;
+}
+
+#overlay{
+position:fixed;
+top:0;
+left:0;
+right:0;
+bottom:0;
+background:#000000cc;
+display:flex;
+align-items:center;
+justify-content:center;
+text-align:center;
+font-size:32px;
+z-index:10;
+display:none;
+white-space:pre-line;
+}
+</style>
+</head>
+
+<body>
+
+<div id="topUI">
+<button id="pauseBtn">⏸</button>
+<button id="muteBtn">🔊</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="controls">
+<div id="joystick"><div id="stick"></div></div>
+<div id="attack">⚔️</div>
+</div>
+
+<div id="overlay"></div>
+
+<script>
+
+const canvas = document.getElementById("game")
+const ctx = canvas.getContext("2d")
+
+function resize(){
+canvas.width = innerWidth
+canvas.height = innerHeight
+}
+resize()
+addEventListener("resize",resize)
+
+let paused=false
+let muted=false
+let score=0
+
+/* world */
+
+const tile=64
+const mapSize=20
+
+const map=[]
+
+for(let y=0;y<mapSize;y++){
+let row=[]
+for(let x=0;x<mapSize;x++){
+let v=Math.random()<0.12?1:0
+if(x===0||y===0||x===mapSize-1||y===mapSize-1) v=1
+row.push(v)
+}
+map.push(row)
+}
+
+/* player */
+
+const player={
+x:tile*2,
+y:tile*2,
+size:34,
+speed:3,
+dirX:0,
+dirY:0,
+health:6,
+attacking:false,
+attackTimer:0
+}
+
+/* enemies */
+
+const enemies=[]
+
+function spawnEnemy(){
+enemies.push({
+x:Math.random()*mapSize*tile,
+y:Math.random()*mapSize*tile,
+size:30,
+speed:1+Math.random()*0.8,
+hp:2
+})
+}
+
+for(let i=0;i<8;i++) spawnEnemy()
+
+/* items */
+
+const hearts=[]
+
+function spawnHeart(x,y){
+hearts.push({x,y,size:20})
+}
+
+/* camera */
+
+let camX=0
+let camY=0
+
+/* helpers */
+
+function solid(x,y){
+
+let tx=Math.floor(x/tile)
+let ty=Math.floor(y/tile)
+
+if(tx<0||ty<0||tx>=mapSize||ty>=mapSize) return true
+return map[ty][tx]===1
+}
+
+/* update */
+
+function update(){
+
+if(paused) return
+
+let nx = player.x + player.dirX*player.speed
+let ny = player.y + player.dirY*player.speed
+
+if(!solid(nx,player.y)) player.x=nx
+if(!solid(player.x,ny)) player.y=ny
+
+if(player.attackTimer>0){
+player.attackTimer--
+}else{
+player.attacking=false
+}
+
+enemies.forEach((e,ei)=>{
+
+let dx = player.x-e.x
+let dy = player.y-e.y
+let d = Math.hypot(dx,dy)
+
+if(d>0){
+e.x += dx/d * e.speed
+e.y += dy/d * e.speed
+}
+
+if(player.attacking && d<60){
+e.hp--
+if(e.hp<=0){
+score+=10
+spawnHeart(e.x,e.y)
+enemies.splice(ei,1)
+spawnEnemy()
+}
+}
+
+if(d<28){
+player.health--
+if(player.health<=0) gameOver()
+}
+
+})
+
+hearts.forEach((h,hi)=>{
+let d=Math.hypot(player.x-h.x,player.y-h.y)
+if(d<30){
+player.health=Math.min(6,player.health+1)
+hearts.splice(hi,1)
+}
+})
+
+camX = player.x - canvas.width/2
+camY = player.y - canvas.height/2
+
+}
+
+/* draw */
+
+function draw(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height)
+
+/* map */
+
+for(let y=0;y<mapSize;y++){
+for(let x=0;x<mapSize;x++){
+
+let px=x*tile-camX
+let py=y*tile-camY
+
+if(px<-tile||py<-tile||px>canvas.width||py>canvas.height) continue
+
+if(map[y][x]==1){
+ctx.fillStyle="#374151"
+ctx.fillRect(px,py,tile,tile)
+}else{
+ctx.fillStyle="#1f5130"
+ctx.fillRect(px,py,tile,tile)
+}
+
+}
+}
+
+/* hearts */
+
+ctx.fillStyle="pink"
+hearts.forEach(h=>{
+ctx.beginPath()
+ctx.arc(h.x-camX,h.y-camY,10,0,Math.PI*2)
+ctx.fill()
+})
+
+/* enemies */
+
+ctx.fillStyle="crimson"
+enemies.forEach(e=>{
+ctx.fillRect(e.x-camX,e.y-camY,e.size,e.size)
+})
+
+/* player */
+
+ctx.fillStyle="lime"
+ctx.fillRect(player.x-camX,player.y-camY,player.size,player.size)
+
+if(player.attacking){
+ctx.strokeStyle="yellow"
+ctx.lineWidth=4
+ctx.beginPath()
+ctx.arc(player.x-camX+17,player.y-camY+17,50,0,Math.PI*2)
+ctx.stroke()
+}
+
+/* UI */
+
+ctx.fillStyle="white"
+ctx.font="18px sans-serif"
+ctx.fillText("Score: "+score,10,80)
+
+for(let i=0;i<player.health;i++){
+ctx.fillText("❤",10+i*20,50)
+}
+
+}
+
+/* loop */
+
+function loop(){
+update()
+draw()
+requestAnimationFrame(loop)
+}
+loop()
+
+/* attack */
+
+document.getElementById("attack").ontouchstart=()=>{
+player.attacking=true
+player.attackTimer=18
+}
+
+/* joystick */
+
+const joy=document.getElementById("joystick")
+const stick=document.getElementById("stick")
+let joyActive=false
+
+joy.ontouchstart=e=>{
+joyActive=true
+moveStick(e.touches[0])
+}
+
+joy.ontouchmove=e=>{
+if(joyActive) moveStick(e.touches[0])
+}
+
+joy.ontouchend=()=>{
+joyActive=false
+stick.style.left="32px"
+stick.style.top="32px"
+player.dirX=0
+player.dirY=0
+}
+
+function moveStick(t){
+
+const r=joy.getBoundingClientRect()
+
+let x=t.clientX-r.left-60
+let y=t.clientY-r.top-60
+
+let dist=Math.hypot(x,y)
+let max=40
+
+if(dist>max){
+x=x/dist*max
+y=y/dist*max
+}
+
+stick.style.left=(x+32)+"px"
+stick.style.top=(y+32)+"px"
+
+player.dirX=x/max
+player.dirY=y/max
+}
+
+/* pause */
+
+pauseBtn.onclick=()=>{
+paused=!paused
+pauseBtn.textContent=paused?"▶":"⏸"
+}
+
+/* mute */
+
+muteBtn.onclick=()=>{
+muted=!muted
+muteBtn.textContent=muted?"🔇":"🔊"
+}
+
+/* game over */
+
+function gameOver(){
+
+paused=true
+
+overlay.style.display="flex"
+overlay.textContent="Game Over\nScore: "+score
+
+window.parent.postMessage({type:"GAME_OVER",score:score},'*')
+
+}
+
+</script>
+</body>
+</html>
