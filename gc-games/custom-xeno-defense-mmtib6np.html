@@ -337,7 +337,7 @@ const ED={
   tank: {name:'Tank',   col:'#226633',hpc:'#55ff88',bhp:580,spd:.55, rw:42,sz:.47},
   flyer:{name:'Flyer',  col:'#cc8800',hpc:'#ffcc44',bhp:150,spd:2.1, rw:30,sz:.32,fly:true},
   boss: {name:'BOSS',   col:'#cc0033',hpc:'#ff6666',bhp:3200,spd:.36,rw:320,sz:.60,boss:true},
-  swarm:{name:'Swarm',  col:'#aacc00',hpc:'#ddff44',bhp:28, spd:2.4, rw:8, sz:.20},
+  swarm:{name:'Swarm',  col:'#aacc00',hpc:'#ddff44',bhp:34, spd:2.88, rw:8, sz:.20},
   stealth:{name:'Stealth',col:'#226688',hpc:'#44aaff',bhp:120,spd:1.6, rw:22,sz:.30,stealth:true},
   berserker:{name:'Berserkr',col:'#cc4400',hpc:'#ff8844',bhp:200,spd:1.0, rw:28,sz:.38},
   splitter:{name:'Splitter',col:'#44aa22',hpc:'#88ff44',bhp:260,spd:.9,  rw:35,sz:.42},
@@ -555,7 +555,7 @@ function dmgEnemy(e, d){
 }
 
 function killEnemy(e){
-  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.5625);
+  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.5625*(e.type==='swarm'?.5:1));
   gold+=rw;score+=rw*3;kills++;
   addPop(e.x,e.y-CELL*.4,`+${rw}`,'#ffd700');
   const n=e.boss?24:7;
