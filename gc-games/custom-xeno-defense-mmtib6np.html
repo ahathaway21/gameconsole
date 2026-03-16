@@ -332,16 +332,16 @@ const TORDER=['rifle','sniper','mgun','rocket','flamer','mortar','arty','railgun
 
 // ── ENEMY DEFINITIONS ────────────────────────────────
 const ED={
-  grunt:    {name:'Grunt',   col:'#9944cc',hpc:'#cc88ff',bhp:90,  spd:1.1,  rw:12, sz:.37, introWave:1},
-  scout:    {name:'Scout',   col:'#cc3388',hpc:'#ff88cc',bhp:60,  spd:2.8,  rw:18, sz:.28, introWave:2},
-  tank:     {name:'Tank',    col:'#226633',hpc:'#55ff88',bhp:580, spd:.55,  rw:42, sz:.47, introWave:4},
-  flyer:    {name:'Flyer',   col:'#cc8800',hpc:'#ffcc44',bhp:150, spd:2.1,  rw:30, sz:.32, introWave:8,  fly:true},
-  boss:     {name:'BOSS',    col:'#cc0033',hpc:'#ff6666',bhp:3200,spd:.36,  rw:320,sz:.60, introWave:5,  boss:true},
-  swarm:    {name:'Swarm',   col:'#aacc00',hpc:'#ddff44',bhp:37,  spd:3.17, rw:8,  sz:.20, introWave:3},
-  stealth:  {name:'Stealth', col:'#226688',hpc:'#44aaff',bhp:120, spd:1.6,  rw:22, sz:.30, introWave:6,  stealth:true},
-  berserker:{name:'Berserkr',col:'#cc4400',hpc:'#ff8844',bhp:200, spd:1.0,  rw:28, sz:.38, introWave:9},
-  splitter: {name:'Splitter',col:'#44aa22',hpc:'#88ff44',bhp:260, spd:.9,   rw:35, sz:.42, introWave:12},
-  shielded: {name:'Shielded',col:'#3366cc',hpc:'#6699ff',bhp:180, spd:1.2,  rw:32, sz:.38, introWave:15, shieldAmt:160}
+  grunt:    {name:'Grunt',   col:'#9944cc',hpc:'#cc88ff',bhp:99,  spd:1.21, rw:12, sz:.37, introWave:1},
+  scout:    {name:'Scout',   col:'#cc3388',hpc:'#ff88cc',bhp:66,  spd:3.08, rw:18, sz:.28, introWave:2},
+  tank:     {name:'Tank',    col:'#226633',hpc:'#55ff88',bhp:638, spd:.605, rw:42, sz:.47, introWave:4},
+  flyer:    {name:'Flyer',   col:'#cc8800',hpc:'#ffcc44',bhp:165, spd:2.31, rw:30, sz:.32, introWave:8,  fly:true},
+  boss:     {name:'BOSS',    col:'#cc0033',hpc:'#ff6666',bhp:3520,spd:.396, rw:320,sz:.60, introWave:5,  boss:true},
+  swarm:    {name:'Swarm',   col:'#aacc00',hpc:'#ddff44',bhp:41,  spd:3.49, rw:8,  sz:.20, introWave:3},
+  stealth:  {name:'Stealth', col:'#226688',hpc:'#44aaff',bhp:132, spd:1.76, rw:22, sz:.30, introWave:6,  stealth:true},
+  berserker:{name:'Berserkr',col:'#cc4400',hpc:'#ff8844',bhp:220, spd:1.1,  rw:28, sz:.38, introWave:9},
+  splitter: {name:'Splitter',col:'#44aa22',hpc:'#88ff44',bhp:286, spd:.99,  rw:35, sz:.42, introWave:12},
+  shielded: {name:'Shielded',col:'#3366cc',hpc:'#6699ff',bhp:198, spd:1.32, rw:32, sz:.38, introWave:15, shieldAmt:176}
 };
 
 // ── GAME STATE ───────────────────────────────────────
@@ -350,7 +350,7 @@ let wave,lives,gold,score,kills,goldSpent,builtTowers;
 let unlocked,selType,selTile;
 let towers,enemies,projs,parts,popups,bolts;
 let waving,betTimer,spawnQ,spawnTmr;
-let swarmCooldown,swarmActive;
+let swarmCooldown,swarmActive,destroyerType;
 let rafId,lastTs,eid;
 let canvas,ctx;
 
@@ -441,6 +441,14 @@ function genSwarmBurst(wn){
 
 function startWave(){
   wave++;
+  // Every 10 waves pick a random introduced enemy type to be a tower destroyer
+  if(wave%10===0){
+    const eligible=Object.keys(ED).filter(t=>ED[t].introWave<=wave&&t!=='boss');
+    destroyerType=eligible[Math.floor(Math.random()*eligible.length)];
+    const dname=ED[destroyerType].name;
+    showToast(`⚠ ${dname.toUpperCase()} CAN DESTROY TOWERS!`);
+    addPop(CW/2,CH*.32,`⚠ ${dname} DESTROYS TOWERS!`,'#ff4400');
+  }
   spawnQ=genWave(wave);
   // Swarm cooldown counts down each wave
   if(swarmCooldown>0) swarmCooldown--;
@@ -471,12 +479,14 @@ function placeTower(col,row){
   if(towers.find(t=>t.col===col&&t.row===row)){showToast('Cell already occupied!');return;}
   if(col<0||col>=COLS||row<0||row>=ROWS)return;
   gold-=def.cost;goldSpent+=def.cost;builtTowers++;
+  const towerMaxHp=200+def.cost*1.5;
   towers.push({
     id:++eid,col,row,x:col*CELL+CELL/2,y:row*CELL+CELL/2,
     type:selType,lvl:0,kills:0,cd:0,angle:-Math.PI/2,
     dmg:def.dmg,rng:def.rng,rate:def.rate,spd:def.spd,
     splash:def.splash,slow:def.slow||0,slowDur:def.slowDur||0,chain:def.chain||0,
     empDur:def.empDur||0,
+    hp:towerMaxHp,maxHp:towerMaxHp,attackCd:0,
     pc:def.pc,col2:def.col
   });
   updGold();addPop(col*CELL+CELL/2,row*CELL+CELL/2,`-${def.cost}G`,'#ffd700');snd('place');
@@ -518,6 +528,8 @@ function spawnEnemy(d){
     col:ed.col,hpc:ed.hpc,sz:ed.sz,
     rw:ed.rw,fly:ed.fly||false,boss:ed.boss||false,
     stealth:ed.stealth||false,berserk:false,
+    destroyer:d.type===destroyerType, // can attack towers
+    attackCd:0,
     animT:Math.random()*Math.PI*2
   };
   if(ed.shieldAmt){e.shield=Math.floor(ed.shieldAmt*(d.hm||1));e.maxShield=e.shield;}
@@ -534,6 +546,35 @@ function updEnemies(dt){
     if(e.type==='berserker'&&!e.berserk&&e.hp<e.mhp*.5){
       e.berserk=true;e.spd=e.bspd*2.6;e.bspd=e.spd;
       addPop(e.x,e.y-CELL*.5,'RAGE!','#ff4400');
+    }
+    // Destroyer enemies attack nearby towers
+    if(e.destroyer){
+      e.attackCd=Math.max(0,(e.attackCd||0)-dt);
+      if(e.attackCd<=0){
+        let nearestTower=null,nearestDist=1.8*CELL;
+        towers.forEach(t=>{
+          const dx=t.x-e.x,dy=t.y-e.y;
+          const d=Math.sqrt(dx*dx+dy*dy);
+          if(d<nearestDist){nearestDist=d;nearestTower=t;}
+        });
+        if(nearestTower){
+          const dmgAmt=18+wave*3;
+          nearestTower.hp-=dmgAmt;
+          addPop(nearestTower.x,nearestTower.y-CELL*.3,`-${dmgAmt}`,'#ff3a3a');
+          for(let p=0;p<4;p++)addPart(nearestTower.x,nearestTower.y,'#ff3a3a',.8,35);
+          e.attackCd=1.2;
+          if(nearestTower.hp<=0){
+            addPop(nearestTower.x,nearestTower.y,'DESTROYED!','#ff0000');
+            for(let p=0;p<14;p++)addPart(nearestTower.x,nearestTower.y,'#ff4400',1.8,60);
+            snd('boom');
+            const idx=towers.findIndex(t=>t.id===nearestTower.id);
+            if(idx>=0)towers.splice(idx,1);
+            if(selTile&&selTile[0]===nearestTower.col&&selTile[1]===nearestTower.row){
+              selTile=null;updSelInfo();
+            }
+          }
+        }
+      }
     }
     e.pi+=e.spd*dt;
     if(e.pi>=PATH.length-1){
@@ -565,7 +606,7 @@ function dmgEnemy(e, d){
 }
 
 function killEnemy(e){
-  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.4556*(e.type==='swarm'?0:1));
+  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.3645*(e.type==='swarm'?0:1));
   gold+=rw;score+=rw*3;kills++;
   addPop(e.x,e.y-CELL*.4,`+${rw}`,'#ffd700');
   const n=e.boss?24:7;
@@ -1249,7 +1290,7 @@ function drawBase(ctx,x,y,r){
 // ── TOWER DRAWING ─────────────────────────────────────
 function drawTowers(){
   towers.forEach(tower=>{
-    const {x,y,type,lvl,angle}=tower;
+    const {x,y,type,lvl,angle,hp,maxHp}=tower;
     ctx.save();ctx.translate(x,y);
     const C=CELL;
     ctx.shadowColor=TD[type].col;ctx.shadowBlur=10;
@@ -1265,6 +1306,14 @@ function drawTowers(){
       ctx.beginPath();ctx.arc(-C*.32+l*8,C*.36,2.5,0,Math.PI*2);ctx.fill();
     }
     ctx.shadowBlur=0;
+    // Tower HP bar (only show when damaged)
+    if(hp<maxHp){
+      const bw=C*.82,bh=3,bx=-bw/2,by=-C*.46;
+      const hf=Math.max(0,hp/maxHp);
+      ctx.fillStyle='#330000';ctx.fillRect(bx,by,bw,bh);
+      ctx.fillStyle=hf>.5?'#44ff44':(hf>.25?'#ffaa00':'#ff3a3a');
+      ctx.fillRect(bx,by,bw*hf,bh);
+    }
     ctx.restore();
   });
 }
@@ -2094,7 +2143,7 @@ function loop(ts){
 
 function waveEnd(){
   waving=false;
-  const bonus=Math.floor((120+wave*35)*.9);
+  const bonus=Math.floor((120+wave*35)*.72);
   gold+=bonus;score+=bonus;updGold();
   addPop(CW/2,CH*.4,`WAVE CLEAR +${bonus}`,'#39ff14');
   // Check tower unlocks
@@ -2209,7 +2258,7 @@ function startGame(){
   document.getElementById('cw').style.display='flex';
   document.getElementById('btm').style.display='block';
   wave=0;lives=5;gold=330;score=0;kills=0;goldSpent=0;builtTowers=0;
-  swarmCooldown=0;swarmActive=false;
+  swarmCooldown=0;swarmActive=false;destroyerType=null;
   unlocked=new Set(['rifle','mgun']);selType=null;selTile=null;
   towers=[];enemies=[];projs=[];parts=[];popups=[];bolts=[];
   waving=false;betTimer=0;spawnQ=[];spawnTmr=0;lastTs=0;eid=0;
