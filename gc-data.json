@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773671863455,
+  "updatedAt": 1773682428573,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -677,14 +677,6 @@
         "date": 1773598463654
       }
     ],
-    "custom-the-crimson-cipher-mms8ihe0": [
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 77918,
-        "date": 1773608642874
-      }
-    ],
     "custom-pickle-crossing-mmsia7i3": [
       {
         "email": "thehathawayluke@gmail.com",
@@ -739,6 +731,14 @@
         "displayName": "thehathawayluke",
         "score": 1,
         "date": 1773624674791
+      }
+    ],
+    "custom-the-crimson-cipher-mms8ihe0": [
+      {
+        "email": "ahathaway21@gmail.com",
+        "displayName": "ahathaway21",
+        "score": 77918,
+        "date": 1773608642874
       }
     ]
   },
