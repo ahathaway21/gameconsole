@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="game-name" content="Pickle Crosser">
+    <meta name="game-emoji" content="🥒">
+    <meta name="game-description" content="Guide your pickle across busy roads, rivers, and cityscapes! Collect coins, unlock skins, and see how far you can go!">
+    <title>Pickle Crosser</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vmin;
+            height: 100vmin;
+            max-width: 500px;
+            max-height: 500px;
+        }
+        
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 255, 100, 0.3);
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .ui-box {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 14px;
+            border-radius: 20px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            pointer-events: auto;
+        }
+        
+        #shopBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        #shopBtn:hover {
+            transform: scale(1.05);
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: grid;
+            grid-template-columns: repeat(3, 36px);
+            grid-template-rows: repeat(2, 36px);
+            gap: 4px;
+            z-index: 10;
+            opacity: 0.7;
+        }
+        
+        .control-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background: rgba(255, 255, 255, 0.25);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.1s;
+        }
+        
+        .control-btn:active {
+            background: rgba(255, 255, 255, 0.5);
+            transform: scale(0.95);
+        }
+        
+        #upBtn { grid-column: 2; grid-row: 1; }
+        #leftBtn { grid-column: 1; grid-row: 2; }
+        #downBtn { grid-column: 2; grid-row: 2; }
+        #rightBtn { grid-column: 3; grid-row: 2; }
+        
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            border-radius: 8px;
+        }
+        
+        #overlay.hidden {
+            display: none;
+        }
+        
+        #overlay h1 {
+            color: #4ade80;
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+        }
+        
+        #overlay h2 {
+            color: white;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        
+        .menu-btn {
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 6px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        #playBtn {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+        }
+        
+        #menuShopBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .menu-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        #shop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            z-index: 200;
+            border-radius: 8px;
+            overflow-y: auto;
+        }
+        
+        #shop.hidden {
+            display: none;
+        }
+        
+        #shop h2 {
+            color: #4ade80;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+        
+        .shop-coins {
+            color: #ffd700;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .skin-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            width: 100%;
+            max-width: 350px;
+        }
+        
+        .skin-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .skin-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .skin-item.selected {
+            border-color: #4ade80;
+        }
+        
+        .skin-item.locked {
+            opacity: 0.6;
+        }
+        
+        .skin-preview {
+            width: 50px;
+            height: 50px;
+            margin: 0 auto 8px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+        
+        .skin-name {
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .skin-price {
+            color: #ffd700;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        
+        #closeShop {
+            margin-top: 15px;
+            padding: 10px 25px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .notification {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #ffd700;
+            padding: 15px 25px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 150;
+            animation: popIn 0.3s ease, fadeOut 0.5s ease 1.5s forwards;
+            text-align: center;
+        }
+        
+        @keyframes popIn {
+            from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        
+        <div id="ui">
+            <div class="ui-box" id="scoreDisplay">🏆 0</div>
+            <div class="ui-box" id="coinDisplay">🪙 0</div>
+            <div class="ui-box" id="shopBtn">🛒 Shop</div>
+        </div>
+        
+        <div id="controls">
+            <button class="control-btn" id="upBtn">▲</button>
+            <button class="control-btn" id="leftBtn">◀</button>
+            <button class="control-btn" id="downBtn">▼</button>
+            <button class="control-btn" id="rightBtn">▶</button>
+        </div>
+        
+        <div id="overlay">
+            <h1>🥒 Pickle Crosser 🥒</h1>
+            <h2>Cross the roads and rivers!</h2>
+            <button class="menu-btn" id="playBtn">▶ Play</button>
+            <button class="menu-btn" id="menuShopBtn">🛒 Shop</button>
+        </div>
+        
+        <div id="shop" class="hidden">
+            <h2>🛒 Pickle Shop</h2>
+            <div class="shop-coins">🪙 <span id="shopCoins">0</span></div>
+            <div class="skin-grid" id="skinGrid"></div>
+            <button id="closeShop">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // Audio Context for sound effects
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+        }
+        
+        function playSound(type) {
+            if (!audioCtx) return;
+            
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            switch(type) {
+                case 'hop':
+                    oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.1);
+                    break;
+                case 'coin':
+                    oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.15);
+                    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.15);
+                    break;
+                case 'death':
+                    oscillator.type = 'sawtooth';
+                    oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+                    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.5);
+                    break;
+                case 'unlock':
+                    oscillator.frequency.setValueAtTime(523, audioCtx.currentTime);
+                    oscillator.frequency.setValueAtTime(659, audioCtx.currentTime + 0.1);
+                    oscillator.frequency.setValueAtTime(784, audioCtx.currentTime + 0.2);
+                    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.4);
+                    break;
+            }
+        }
+        
+        // Game constants
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const GRID_SIZE = 10;
+        const CELL_SIZE = canvas.width / GRID_SIZE;
+        
+        // Skins
+        const skins = [
+            { id: 'classic', name: 'Classic', price: 0, owned: true, emoji: '🥒' },
+            { id: 'googly', name: 'Googly Eyes', price: 5, owned: false, emoji: '👀' },
+            { id: 'golden', name: 'Golden Pickle', price: 20, owned: false, emoji: '✨' },
+            { id: 'ninja', name: 'Ninja Pickle', price: 35, owned: false, emoji: '🥷' },
+            { id: 'space', name: 'Space Pickle', price: 50, owned: false, emoji: '🚀' },
+            { id: 'fire', name: 'Fire Pickle', price: 75, owned: false, emoji: '🔥' },
+            { id: 'rainbow', name: 'Rainbow Pickle', price: 100, owned: false, emoji: '🌈' },
+            { id: 'king', name: 'King Pickle', price: 0, owned: false, special: true, emoji: '👑' }
+        ];
+        
+        // Game state
+        let gameState = {
+            playing: false,
+            score: 0,
+            highScore: 0,
+            totalCoins: parseInt(localStorage.getItem('pickleCoins') || '0'),
+            currentSkin: localStorage.getItem('pickleSkin') || 'classic',
+            ownedSkins: JSON.parse(localStorage.getItem('ownedSkins') || '["classic"]'),
+            cameraOffset: 0,
+            scrollSpeed: 0.4,
+            maxScore: 0
+        };
+        
+        // Check for king skin unlock
+        if (gameState.maxScore >= 1000 && !gameState.ownedSkins.includes('king')) {
+            gameState.ownedSkins.push('king');
+            localStorage.setItem('ownedSkins', JSON.stringify(gameState.ownedSkins));
+        }
+        
+        // Update skin ownership
+        skins.forEach(skin => {
+            skin.owned = gameState.ownedSkins.includes(skin.id);
+        });
+        
+        // Player
+        let player = {
+            gridX: 4,
+            gridY: 8,
+            actualY: 8
+        };
+        
+        // Rows and objects
+        let rows = [];
+        let coins = [];
+        let particles = [];
+        
+        // Row types
+        const ROW_TYPES = ['grass', 'road', 'road', 'water', 'road', 'grass', 'water', 'road'];
+        
+        function generateRow(index) {
+            const types = ['grass', 'road', 'water'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            const row = {
+                type: type,
+                y: index,
+                objects: [],
+                direction: Math.random() < 0.5 ? 1 : -1,
+                speed: 0.01 + Math.random() * 0.02
+            };
+            
+            if (type === 'road') {
+                const numCars = 2 + Math.floor(Math.random() * 2);
+                for (let i = 0; i < numCars; i++) {
+                    row.objects.push({
+                        x: (i * GRID_SIZE / numCars) + Math.random() * 2,
+                        width: 1.5 + Math.random() * 0.5,
+                        color: ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#1abc9c'][Math.floor(Math.random() * 5)]
+                    });
+                }
+            } else if (type === 'water') {
+                const numLogs = 2 + Math.floor(Math.random() * 2);
+                for (let i = 0; i < numLogs; i++) {
+                    row.objects.push({
+                        x: (i * GRID_SIZE / numLogs) + Math.random() * 2,
+                        width: 2 + Math.random()
+                    });
+                }
+            }
+            
+            // Add coins occasionally
+            if (Math.random() < 0.15 && type !== 'water') {
+                coins.push({
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: index,
+                    collected: false,
+                    bobOffset: Math.random() * Math.PI * 2
+                });
+            }
+            
+            return row;
+        }
+        
+        function initializeRows() {
+            rows = [];
+            coins = [];
+            for (let i = -5; i < 20; i++) {
+                if (i < 2) {
+                    rows.push({ type: 'grass', y: i, objects: [], direction: 1, speed: 0 });
+                } else {
+                    rows.push(generateRow(i));
+                }
+            }
+        }
+        
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    color: color,
+                    size: 3 + Math.random() * 5
+                });
+            }
+        }
+        
+        function showNotification(text) {
+            const notif = document.createElement('div');
+            notif.className = 'notification';
+            notif.textContent = text;
+            document.getElementById('gameContainer').appendChild(notif);
+            setTimeout(() => notif.remove(), 2000);
+        }
+        
+        function drawGrass(y, screenY) {
+            // Base grass color
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, screenY, canvas.width, CELL_SIZE);
+            
+            // Grass texture - darker patches
+            ctx.fillStyle = '#1e7b1e';
+            for (let i = 0; i < 15; i++) {
+                const gx = ((y * 37 + i * 73) % 100) / 100 * canvas.width;
+                const gy = screenY + ((i * 31) % 50);
+                ctx.beginPath();
+                ctx.arc(gx, gy, 3 + (i % 3), 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Grass blades
+            ctx.strokeStyle = '#32CD32';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 20; i++) {
+                const gx = ((y * 41 + i * 67) % 100) / 100 * canvas.width;
+                const gy = screenY + CELL_SIZE - 5;
+                ctx.beginPath();
+                ctx.moveTo(gx, gy);
+                ctx.lineTo(gx + (i % 2 ? 3 : -3), gy - 8 - (i % 5));
+                ctx.stroke();
+            }
+            
+            // Flowers occasionally
+            if ((y * 17) % 7 === 0) {
+                const fx = ((y * 53) % 100) / 100 * canvas.width;
+                ctx.fillStyle = ['#ff6b6b', '#ffd93d', '#fff'][y % 3];
+                ctx.beginPath();
+                ctx.arc(fx, screenY + CELL_SIZE / 2, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffeb3b';
+                ctx.beginPath();
+                ctx.arc(fx, screenY + CELL_SIZE / 2, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function drawRoad(y, screenY) {
+            // Asphalt
+            ctx.fillStyle = '#2c2c2c';
+            ctx.fillRect(0, screenY, canvas.width, CELL_SIZE);
+            
+            // Road texture
+            ctx.fillStyle = '#383838';
+            for (let i = 0; i < 10; i++) {
+                const rx = ((y * 29 + i * 53) % 100) / 100 * canvas.width;
+                const ry = screenY + ((i * 17) % 40);
+                ctx.fillRect(rx, ry, 8 + (i % 4), 3);
+            }
+            
+            // Road lines
+            ctx.strokeStyle = '#f1c40f';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([20, 15]);
+            ctx.beginPath();
+            ctx.moveTo(0, screenY + CELL_SIZE / 2);
+            ctx.lineTo(canvas.width, screenY + CELL_SIZE / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Edge lines
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, screenY + 2);
+            ctx.lineTo(canvas.width, screenY + 2);
+            ctx.moveTo(0, screenY + CELL_SIZE - 2);
+            ctx.lineTo(canvas.width, screenY + CELL_SIZE - 2);
+            ctx.stroke();
+        }
+        
+        function drawWater(y, screenY, time) {
+            // Base water
+            ctx.fillStyle = '#1e90ff';
+            ctx.fillRect(0, screenY, canvas.width, CELL_SIZE);
+            
+            // Water waves
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.4)';
+            for (let i = 0; i < 8; i++) {
+                const wx = (i * 70 + time * 50 + y * 30) % (canvas.width + 100) - 50;
+                ctx.beginPath();
+                ctx.ellipse(wx, screenY + CELL_SIZE / 2 + Math.sin(time * 3 + i) * 5, 30, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Sparkles
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            for (let i = 0; i < 5; i++) {
+                const sx = ((y * 43 + i * 97 + Math.floor(time * 2)) % 100) / 100 * canvas.width;
+                const sy = screenY + 10 + ((i * 31) % 30);
+                if (Math.sin(time * 5 + i * 2) > 0.7) {
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        
+        function drawCar(obj, screenY, direction) {
+            const x = obj.x * CELL_SIZE;
+            const w = obj.width * CELL_SIZE;
+            const h = CELL_SIZE * 0.7;
+            const y = screenY + (CELL_SIZE - h) / 2;
+            
+            // Car body
+            ctx.fillStyle = obj.color;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 5);
+            ctx.fill();
+            
+            // Car roof
+            ctx.fillStyle = shadeColor(obj.color, -20);
+            const roofX = direction > 0 ? x + w * 0.25 : x + w * 0.15;
+            ctx.beginPath();
+            ctx.roundRect(roofX, y + 5, w * 0.5, h * 0.5, 3);
+            ctx.fill();
+            
+            // Windows
+            ctx.fillStyle = '#87CEEB';
+            const winX = direction > 0 ? x + w * 0.28 : x + w * 0.18;
+            ctx.beginPath();
+            ctx.roundRect(winX, y + 8, w * 0.44, h * 0.35, 2);
+            ctx.fill();
+            
+            // Headlights
+            ctx.fillStyle = direction > 0 ? '#ffeb3b' : '#ff0000';
+            const lightX = direction > 0 ? x + w - 6 : x + 2;
+            ctx.beginPath();
+            ctx.arc(lightX, y + h * 0.25, 3, 0, Math.PI * 2);
+            ctx.arc(lightX, y + h * 0.75, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Wheels
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath();
+            ctx.arc(x + w * 0.2, y + h, 6, 0, Math.PI * 2);
+            ctx.arc(x + w * 0.8, y + h, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Wheel rims
+            ctx.fillStyle = '#888';
+            ctx.beginPath();
+            ctx.arc(x + w * 0.2, y + h, 3, 0, Math.PI * 2);
+            ctx.arc(x + w * 0.8, y + h, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function shadeColor(color, percent) {
+            const num = parseInt(color.replace('#', ''), 16);
+            const amt = Math.round(2.55 * percent);
+            const R = (num >> 16) + amt;
+            const G = (num >> 8 & 0x00FF) + amt;
+            const B = (num & 0x0000FF) + amt;
+            return '#' + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 + 
+                (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 + 
+                (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+        }
+        
+        function drawLog(obj, screenY) {
+            const x = obj.x * CELL_SIZE;
+            const w = obj.width * CELL_SIZE;
+            const h = CELL_SIZE * 0.6;
+            const y = screenY + (CELL_SIZE - h) / 2;
+            
+            // Log shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(x + w/2, y + h + 5, w/2, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Main log
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, h/2);
+            ctx.fill();
+            
+            // Log texture
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+            for (let i = 1; i < 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(x + w * i / 4, y + 5);
+                ctx.lineTo(x + w * i / 4, y + h - 5);
+                ctx.stroke();
+            }
+            
+            // Highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(x + w/2, y + h * 0.3, w * 0.4, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Log ends
+            ctx.fillStyle = '#A0522D';
+            ctx.beginPath();
+            ctx.ellipse(x + 5, y + h/2, 5, h/2 - 2, 0, 0, Math.PI * 2);
+            ctx.ellipse(x + w - 5, y + h/2, 5, h/2 - 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawPickle(x, y, skin) {
+            const centerX = x + CELL_SIZE / 2;
+            const centerY = y + CELL_SIZE / 2;
+            const width = CELL_SIZE * 0.35;
+            const height = CELL_SIZE * 0.55;
+            
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(3, height/2 + 5, width * 0.8, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Skin-specific rendering
+            switch(skin) {
+                case 'golden':
+                    // Glow
+                    const goldGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, height);
+                    goldGradient.addColorStop(0, '#ffd700');
+                    goldGradient.addColorStop(1, '#b8860b');
+                    ctx.fillStyle = goldGradient;
+                    break;
+                case 'fire':
+                    ctx.fillStyle = '#ff4500';
+                    break;
+                case 'rainbow':
+                    const rainbowGradient = ctx.createLinearGradient(0, -height/2, 0, height/2);
+                    rainbowGradient.addColorStop(0, '#ff0000');
+                    rainbowGradient.addColorStop(0.2, '#ff8800');
+                    rainbowGradient.addColorStop(0.4, '#ffff00');
+                    rainbowGradient.addColorStop(0.6, '#00ff00');
+                    rainbowGradient.addColorStop(0.8, '#0088ff');
+                    rainbowGradient.addColorStop(1, '#8800ff');
+                    ctx.fillStyle = rainbowGradient;
+                    break;
+                case 'ninja':
+                    ctx.fillStyle = '#2d2d2d';
+                    break;
+                case 'space':
+                    ctx.fillStyle = '#4a0080';
+                    break;
+                default:
+                    const pickleGradient = ctx.createLinearGradient(-width, 0, width, 0);
+                    pickleGradient.addColorStop(0, '#2d5016');
+                    pickleGradient.addColorStop(0.5, '#4a7c23');
+                    pickleGradient.addColorStop(1, '#2d5016');
+                    ctx.fillStyle = pickleGradient;
+            }
+            
+            // Main pickle body
+            ctx.beginPath();
+            ctx.ellipse(0, 0, width, height, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Pickle bumps
+            ctx.fillStyle = skin === 'golden' ? '#e6c200' : 
+                           skin === 'fire' ? '#ff6600' : 
+                           skin === 'ninja' ? '#1a1a1a' :
+                           skin === 'space' ? '#6a0dad' : '#3d6b1c';
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2;
+                const bx = Math.cos(angle) * width * 0.7;
+                const by = Math.sin(angle) * height * 0.6;
+                ctx.beginPath();
+                ctx.arc(bx, by, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(-width * 0.4, -height * 0.3, 4, 8, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Skin-specific features
+            if (skin === 'googly') {
+                // Big googly eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(-8, -8, 8, 0, Math.PI * 2);
+                ctx.arc(8, -8, 8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                const eyeOffsetX = Math.sin(Date.now() / 200) * 3;
+                const eyeOffsetY = Math.cos(Date.now() / 300) * 2;
+                ctx.beginPath();
+                ctx.arc(-8 + eyeOffsetX, -8 + eyeOffsetY, 4, 0, Math.PI * 2);
+                ctx.arc(8 + eyeOffsetX, -8 + eyeOffsetY, 4, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (skin === 'king') {
+                // Crown
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.moveTo(-12, -height + 5);
+                ctx.lineTo(-15, -height - 12);
+                ctx.lineTo(-8, -height - 5);
+                ctx.lineTo(0, -height - 15);
+                ctx.lineTo(8, -height - 5);
+                ctx.lineTo(15, -height - 12);
+                ctx.lineTo(12, -height + 5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(0, -height - 8, 3, 0, Math.PI * 2);
+                ctx.fill();
+                // Regular eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 4, 0, Math.PI * 2);
+                ctx.arc(6, -5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 2, 0, Math.PI * 2);
+                ctx.arc(6, -5, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (skin === 'ninja') {
+                // Ninja mask
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(-15, -12, 30, 10);
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.ellipse(-6, -8, 5, 3, 0, 0, Math.PI * 2);
+                ctx.ellipse(6, -8, 5, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (skin === 'space') {
+                // Space helmet
+                ctx.strokeStyle = 'rgba(135, 206, 250, 0.5)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, -5, 18, 0, Math.PI * 2);
+                ctx.stroke();
+                // Stars around
+                ctx.fillStyle = 'white';
+                for (let i = 0; i < 4; i++) {
+                    const starAngle = Date.now() / 500 + i * 1.57;
+                    const sx = Math.cos(starAngle) * 22;
+                    const sy = Math.sin(starAngle) * 22 - 5;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 4, 0, Math.PI * 2);
+                ctx.arc(6, -5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 2, 0, Math.PI * 2);
+                ctx.arc(6, -5, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (skin === 'fire') {
+                // Fire particles
+                ctx.fillStyle = '#ff0';
+                for (let i = 0; i < 5; i++) {
+                    const fireY = -height - 5 - Math.random() * 15 - (Date.now() / 100 % 10);
+                    const fireX = (Math.random() - 0.5) * width;
+                    ctx.beginPath();
+                    ctx.arc(fireX, fireY, 3 + Math.random() * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 4, 0, Math.PI * 2);
+                ctx.arc(6, -5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 2, 0, Math.PI * 2);
+                ctx.arc(6, -5, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Standard eyes
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 4, 0, Math.PI * 2);
+                ctx.arc(6, -5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(-6, -5, 2, 0, Math.PI * 2);
+                ctx.arc(6, -5, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Smile
+            if (skin !== 'ninja') {
+                ctx.strokeStyle = '#1a4d1a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 5, 8, 0.2, Math.PI - 0.2);
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawCoin(coin, screenY, time) {
+            const x = coin.x * CELL_SIZE + CELL_SIZE / 2;
+            const y = screenY + CELL_SIZE / 2 + Math.sin(time * 5 + coin.bobOffset) * 3;
+            
+            // Glow
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+            ctx.beginPath();
+            ctx.arc(x, y, 18, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Coin
+            const gradient = ctx.createRadialGradient(x - 3, y - 3, 0, x, y, 12);
+            gradient.addColorStop(0, '#fff7a0');
+            gradient.addColorStop(0.5, '#ffd700');
+            gradient.addColorStop(1, '#b8860b');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(x, y, 12, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Dollar sign
+            ctx.fillStyle = '#8b6914';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('$', x, y);
+        }
+        
+        function updateGame(deltaTime) {
+            if (!gameState.playing) return;
+            
+            const time = Date.now() / 1000;
+            
+            // Scroll camera
+            gameState.cameraOffset += gameState.scrollSpeed * deltaTime * 60;
+            
+            // Update player's actual Y position relative to camera
+            player.actualY = player.gridY - gameState.cameraOffset / CELL_SIZE;
+            
+            // If player is pushed off bottom of screen, die
+            if (player.actualY > 9.5) {
+                killPlayer('pushed');
+                return;
+            }
+            
+            // Update row objects
+            rows.forEach(row => {
+                row.objects.forEach(obj => {
+                    obj.x += row.direction * row.speed * deltaTime * 60;
+                    if (obj.x > GRID_SIZE + 2) obj.x = -obj.width - 1;
+                    if (obj.x < -obj.width - 2) obj.x = GRID_SIZE + 1;
+                });
+            });
+            
+            // Generate new rows as needed
+            const topRowY = Math.floor(gameState.cameraOffset / CELL_SIZE) - 5;
+            while (rows.length === 0 || rows[rows.length - 1].y < topRowY + 25) {
+                const newY = rows.length > 0 ? rows[rows.length - 1].y + 1 : topRowY;
+                rows.push(generateRow(newY));
+            }
+            
+            // Remove old rows
+            rows = rows.filter(row => row.y > topRowY - 5);
+            
+            // Update particles
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.3;
+                p.life -= 0.02;
+                return p.life > 0;
+            });
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Collect coins
+            coins.forEach(coin => {
+                if (!coin.collected && coin.x === player.gridX && coin.y === player.gridY) {
+                    coin.collected = true;
+                    gameState.totalCoins++;
+                    localStorage.setItem('pickleCoins', gameState.totalCoins.toString());
+                    playSound('coin');
+                    createParticles(
+                        coin.x * CELL_SIZE + CELL_SIZE / 2,
+                        (coin.y - gameState.cameraOffset / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2,
+                        '#ffd700',
+                        10
+                    );
+                }
+            });
+            
+            // Remove collected coins
+            coins = coins.filter(c => !c.collected && c.y > topRowY - 5);
+            
+            // Update score based on progress
+            const newScore = Math.max(0, Math.floor(player.gridY - 8));
+            if (newScore > gameState.score) {
+                gameState.score = newScore;
+                
+                // Check for king skin unlock
+                if (gameState.score >= 1000 && !gameState.ownedSkins.includes('king')) {
+                    gameState.ownedSkins.push('king');
+                    localStorage.setItem('ownedSkins', JSON.stringify(gameState.ownedSkins));
+                    skins.find(s => s.id === 'king').owned = true;
+                    showNotification('👑 King Pickle Unlocked!');
+                    playSound('unlock');
+                }
+            }
+            
+            // Update UI
+            document.getElementById('scoreDisplay').textContent = `🏆 ${gameState.score}`;
+            document.getElementById('coinDisplay').textContent = `🪙 ${gameState.totalCoins}`;
+        }
+        
+        function checkCollisions() {
+            const currentRow = rows.find(r => r.y === player.gridY);
+            if (!currentRow) return;
+            
+            const playerCenterX = player.gridX + 0.5;
+            const hitboxMargin = 0.15; // Smaller hitbox
+            
+            if (currentRow.type === 'road') {
+                for (const car of currentRow.objects) {
+                    const carLeft = car.x + hitboxMargin;
+                    const carRight = car.x + car.width - hitboxMargin;
+                    if (playerCenterX > carLeft && playerCenterX < carRight) {
+                        killPlayer('car');
+                        return;
+                    }
+                }
+            } else if (currentRow.type === 'water') {
+                let onLog = false;
+                for (const log of currentRow.objects) {
+                    const logLeft = log.x + hitboxMargin;
+                    const logRight = log.x + log.width - hitboxMargin;
+                    if (playerCenterX > logLeft && playerCenterX < logRight) {
+                        onLog = true;
+                        // Move with log
+                        player.gridX += currentRow.direction * currentRow.speed;
+                        if (player.gridX < 0 || player.gridX >= GRID_SIZE) {
+                            killPlayer('water');
+                            return;
+                        }
+                        break;
+                    }
+                }
+                if (!onLog) {
+                    killPlayer('water');
+                    return;
+                }
+            }
+        }
+        
+        function killPlayer(cause) {
+            gameState.playing = false;
+            playSound('death');
+            
+            // Create death particles (pickle juice!)
+            const playerScreenX = player.gridX * CELL_SIZE + CELL_SIZE / 2;
+            const playerScreenY = player.actualY * CELL_SIZE + CELL_SIZE / 2;
+            
+            // Green pickle juice particles
+            createParticles(playerScreenX, playerScreenY, '#4a7c23', 20);
+            createParticles(playerScreenX, playerScreenY, '#2d5016', 15);
+            createParticles(playerScreenX, playerScreenY, '#7cb342', 10);
+            
+            // Seeds
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x: playerScreenX,
+                    y: playerScreenY,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10 - 5,
+                    life: 1.5,
+                    color: '#f5f5dc',
+                    size: 4
+                });
+            }
+            
+            // Track max score for king unlock
+            if (gameState.score > gameState.maxScore) {
+                gameState.maxScore = gameState.score;
+            }
+            
+            // Delay game over to show death animation
+            setTimeout(() => {
+                window.parent.postMessage({ type: 'GAME_OVER', score: gameState.score }, '*');
+                document.getElementById('overlay').classList.remove('hidden');
+                document.querySelector('#overlay h2').textContent = `Score: ${gameState.score} | Coins: ${gameState.totalCoins}`;
+            }, 800);
+        }
+        
+        function render() {
+            const time = Date.now() / 1000;
+            
+            // Clear canvas
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw rows
+            rows.forEach(row => {
+                const screenY = (row.y - gameState.cameraOffset / CELL_SIZE) * CELL_SIZE;
+                
+                if (screenY < -CELL_SIZE || screenY > canvas.height + CELL_SIZE) return;
+                
+                if (row.type === 'grass') {
+                    drawGrass(row.y, screenY);
+                } else if (row.type === 'road') {
+                    drawRoad(row.y, screenY);
+                    row.objects.forEach(car => drawCar(car, screenY, row.direction));
+                } else if (row.type === 'water') {
+                    drawWater(row.y, screenY, time);
+                    row.objects.forEach(log => drawLog(log, screenY));
+                }
+            });
+            
+            // Draw coins
+            coins.forEach(coin => {
+                if (!coin.collected) {
+                    const screenY = (coin.y - gameState.cameraOffset / CELL_SIZE) * CELL_SIZE;
+                    if (screenY > -CELL_SIZE && screenY < canvas.height + CELL_SIZE) {
+                        drawCoin(coin, screenY, time);
+                    }
+                }
+            });
+            
+            // Draw player
+            if (gameState.playing) {
+                const playerScreenX = player.gridX * CELL_SIZE;
+                const playerScreenY = player.actualY * CELL_SIZE;
+                drawPickle(playerScreenX, playerScreenY, gameState.currentSkin);
+            }
+            
+            // Draw particles
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+        
+        function movePlayer(dx, dy) {
+            if (!gameState.playing) return;
+            
+            initAudio();
+            
+            const newX = player.gridX + dx;
+            const newY = player.gridY + dy;
+            
+            // Boundary checks
+            if (newX < 0 || newX >= GRID_SIZE) return;
+            
+            // Check if moving into valid row
+            const targetRow = rows.find(r => r.y === newY);
+            if (!targetRow) return;
+            
+            // Don't allow moving backward past bottom of screen
+            const newActualY = newY - gameState.cameraOffset / CELL_SIZE;
+            if (newActualY > 9) return;
+            
+            player.gridX = newX;
+            player.gridY = newY;
+            
+            playSound('hop');
+        }
+        
+        function startGame() {
+            initAudio();
+            
+            gameState.playing = true;
+            gameState.score = 0;
+            gameState.cameraOffset = 0;
+            
+            player.gridX = 4;
+            player.gridY = 8;
+            player.actualY = 8;
+            
+            particles = [];
+            
+            initializeRows();
+            
+            // Make sure player doesn't spawn on danger
+            const startRow = rows.find(r => r.y === 8);
+            if (startRow) {
+                startRow.type = 'grass';
+                startRow.objects = [];
+            }
+            
+            document.getElementById('overlay').classList.add('hidden');
+            document.getElementById('shop').classList.add('hidden');
+            
+            document.getElementById('scoreDisplay').textContent = '🏆 0';
+        }
+        
+        // Shop functionality
+        function renderShop() {
+            const grid = document.getElementById('skinGrid');
+            grid.innerHTML = '';
+            document.getElementById('shopCoins').textContent = gameState.totalCoins;
+            
+            skins.forEach(skin => {
+                const item = document.createElement('div');
+                item.className = 'skin-item';
+                if (skin.id === gameState.currentSkin) item.classList.add('selected');
+                if (!skin.owned) item.classList.add('locked');
+                
+                let priceText = skin.owned ? 'Owned' : `${skin.price} 🪙`;
+                if (skin.special && !skin.owned) {
+                    priceText = 'Score 1000';
+                }
+                
+                item.innerHTML = `
+                    <div class="skin-preview">${skin.emoji}</div>
+                    <div class="skin-name">${skin.name}</div>
+                    <div class="skin-price">${priceText}</div>
+                `;
+                
+                item.addEventListener('click', () => {
+                    if (skin.owned) {
+                        gameState.currentSkin = skin.id;
+                        localStorage.setItem('pickleSkin', skin.id);
+                        playSound('hop');
+                        renderShop();
+                    } else if (!skin.special && gameState.totalCoins >= skin.price) {
+                        gameState.totalCoins -= skin.price;
+                        skin.owned = true;
+                        gameState.ownedSkins.push(skin.id);
+                        gameState.currentSkin = skin.id;
+                        localStorage.setItem('pickleCoins', gameState.totalCoins.toString());
+                        localStorage.setItem('ownedSkins', JSON.stringify(gameState.ownedSkins));
+                        localStorage.setItem('pickleSkin', skin.id);
+                        playSound('unlock');
+                        showNotification(`Unlocked ${skin.name}!`);
+                        renderShop();
+                    }
+                });
+                
+                grid.appendChild(item);
+            });
+        }
+        
+        // Event listeners
+        document.getElementById('playBtn').addEventListener('click', startGame);
+        document.getElementById('menuShopBtn').addEventListener('click', () => {
+            document.getElementById('shop').classList.remove('hidden');
+            renderShop();
+        });
+        document.getElementById('shopBtn').addEventListener('click', () => {
+            document.getElementById('shop').classList.remove('hidden');
+            renderShop();
+        });
+        document.getElementById('closeShop').addEventListener('click', () => {
+            document.getElementById('shop').classList.add('hidden');
+        });
+        
+        // Controls
+        document.getElementById('upBtn').addEventListener('click', () => movePlayer(0, 1));
+        document.getElementById('downBtn').addEventListener('click', () => movePlayer(0, -1));
+        document.getElementById('leftBtn').addEventListener('click', () => movePlayer(-1, 0));
+        document.getElementById('rightBtn').addEventListener('click', () => movePlayer(1, 0));
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    e.preventDefault();
+                    movePlayer(0, 1);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    e.preventDefault();
+                    movePlayer(0, -1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    e.preventDefault();
+                    movePlayer(-1, 0);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    e.preventDefault();
+                    movePlayer(1, 0);
+                    break;
+            }
+        });
+        
+        // Touch swipe controls
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        canvas.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        canvas.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            
+            const minSwipe = 30;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > minSwipe) {
+                    movePlayer(dx > 0 ? 1 : -1, 0);
+                }
+            } else {
+                if (Math.abs(dy) > minSwipe) {
+                    movePlayer(0, dy < 0 ? 1 : -1);
+                }
+            }
+        }, { passive: true });
+        
+        // Game loop
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = Math.min((timestamp - lastTime) / 1000, 0.1);
+            lastTime = timestamp;
+            
+            updateGame(deltaTime);
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize
+        initializeRows();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
