@@ -118,7 +118,7 @@ body{font-family:'Rajdhani',sans-serif;color:var(--text);display:flex;align-item
   <div id="hud" style="display:none">
     <div class="hi"><div class="hl">Wave</div><div class="hv w" id="h-wave">—</div></div>
     <div class="hs"></div>
-    <div class="hi"><div class="hl">Lives</div><div class="hv l" id="h-lives">20</div></div>
+    <div class="hi"><div class="hl">Lives</div><div class="hv l" id="h-lives">5</div></div>
     <div class="hs"></div>
     <div class="hi"><div class="hl">Gold</div><div class="hv g" id="h-gold">150</div></div>
     <div class="hs"></div>
@@ -259,37 +259,37 @@ const TD={
   rifle:{id:'rifle',name:'Rifleman',em:'🪖',col:'#3a6e2e',cost:60,dmg:18,rng:2.8,rate:1.4,spd:10,splash:0,slow:0,chain:0,pc:'#ffff66',uw:0,
     upg:[{c:50,l:'Improved Ammo',dmg:28,rng:3.1,rate:1.7},{c:100,l:'Elite Soldier',dmg:46,rng:3.5,rate:2.1}],
     desc:'Fast-firing infantry. Great all-rounder.'},
-  sniper:{id:'sniper',name:'Sniper',em:'🎯',col:'#1e4a30',cost:110,dmg:90,rng:5.2,rate:.45,spd:22,splash:0,slow:0,chain:0,pc:'#ff5555',uw:0,
+  sniper:{id:'sniper',name:'Sniper',em:'🎯',col:'#1e4a30',cost:110,dmg:90,rng:5.2,rate:.45,spd:22,splash:0,slow:0,chain:0,pc:'#ff5555',uw:5,
     upg:[{c:90,l:'Long Barrel',dmg:145,rng:6.2,rate:.58},{c:185,l:'Anti-Materiel',dmg:240,rng:7.5,rate:.72}],
     desc:'Extreme range & damage. Slow fire rate.'},
-  rocket:{id:'rocket',name:'Rocket',em:'🚀',col:'#7a3e10',cost:160,dmg:100,rng:3.2,rate:.52,spd:6,splash:1.2,slow:0,chain:0,pc:'#ff6600',uw:3,
+  rocket:{id:'rocket',name:'Rocket',em:'🚀',col:'#7a3e10',cost:160,dmg:100,rng:3.2,rate:.52,spd:6,splash:1.2,slow:0,chain:0,pc:'#ff6600',uw:10,
     upg:[{c:120,l:'Bigger Warhead',dmg:155,rng:3.7,splash:1.7},{c:240,l:'Cluster Missile',dmg:260,rng:4.2,splash:2.5}],
     desc:'Splash AoE. Decimates groups.'},
-  flamer:{id:'flamer',name:'Flamer',em:'🔥',col:'#8a2800',cost:130,dmg:24,rng:2.0,rate:3.8,spd:4,splash:.7,slow:0,chain:0,pc:'#ff4400',uw:5,
+  flamer:{id:'flamer',name:'Flamer',em:'🔥',col:'#8a2800',cost:130,dmg:24,rng:2.0,rate:3.8,spd:4,splash:.7,slow:0,chain:0,pc:'#ff4400',uw:15,
     upg:[{c:100,l:'Extended Fuel',dmg:38,rng:2.5,rate:4.5},{c:200,l:'Napalm Fuel',dmg:60,rng:3.1,splash:1.3}],
     desc:'Short range continuous fire. Cannot hit flyers.'},
-  arty:{id:'arty',name:'Artillery',em:'💣',col:'#5a5a20',cost:220,dmg:185,rng:5.5,rate:.2,spd:5,splash:2.2,slow:0,chain:0,pc:'#cccc00',uw:8,
+  arty:{id:'arty',name:'Artillery',em:'💣',col:'#5a5a20',cost:220,dmg:185,rng:5.5,rate:.2,spd:5,splash:2.2,slow:0,chain:0,pc:'#cccc00',uw:25,
     upg:[{c:180,l:'Heavy Shells',dmg:280,rng:6.2,splash:2.9},{c:360,l:'Orbital Strike',dmg:470,rng:7,splash:4}],
     desc:'Massive AoE, devastating, very slow.'},
-  tesla:{id:'tesla',name:'Tesla',em:'⚡',col:'#10308a',cost:185,dmg:55,rng:3.2,rate:.8,spd:0,splash:0,slow:0,chain:3,pc:'#44aaff',uw:12,
+  tesla:{id:'tesla',name:'Tesla',em:'⚡',col:'#10308a',cost:185,dmg:55,rng:3.2,rate:.8,spd:0,splash:0,slow:0,chain:3,pc:'#44aaff',uw:35,
     upg:[{c:150,l:'Overcharge',dmg:82,rng:3.8,chain:5},{c:300,l:'Storm Grid',dmg:130,rng:4.5,chain:8}],
     desc:'Chain lightning. Hits multiple enemies.'},
-  cryo:{id:'cryo',name:'Cryo',em:'❄️',col:'#0a5a8a',cost:150,dmg:20,rng:3.0,rate:1.0,spd:7,splash:1.0,slow:.45,slowDur:2.5,chain:0,pc:'#88ffff',uw:16,
+  cryo:{id:'cryo',name:'Cryo',em:'❄️',col:'#0a5a8a',cost:150,dmg:20,rng:3.0,rate:1.0,spd:7,splash:1.0,slow:.45,slowDur:2.5,chain:0,pc:'#88ffff',uw:45,
     upg:[{c:120,l:'Deep Freeze',dmg:30,rng:3.6,slow:.28,slowDur:3.8},{c:240,l:'Absolute Zero',dmg:48,rng:4.2,slow:.14,slowDur:5,splash:1.9}],
     desc:'Slows all enemies in range. Support.'},
-  mgun:{id:'mgun',name:'Machine Gun',em:'🔫',col:'#2a5a1a',cost:80,dmg:10,rng:2.6,rate:5.5,spd:14,splash:0,slow:0,chain:0,pc:'#ffee44',uw:2,
+  mgun:{id:'mgun',name:'Machine Gun',em:'🔫',col:'#2a5a1a',cost:80,dmg:10,rng:2.6,rate:5.5,spd:14,splash:0,slow:0,chain:0,pc:'#ffee44',uw:0,
     upg:[{c:65,l:'Heavy Barrel',dmg:16,rng:2.9,rate:7},{c:130,l:'Gatling Upgrade',dmg:26,rng:3.3,rate:9.5}],
     desc:'Blazing fire rate. Shreds scouts and swarms.'},
-  mortar:{id:'mortar',name:'Mortar',em:'🎆',col:'#6a5828',cost:175,dmg:130,rng:4.2,rate:.38,spd:4,splash:1.8,slow:0,chain:0,pc:'#ffaa00',uw:6,
+  mortar:{id:'mortar',name:'Mortar',em:'🎆',col:'#6a5828',cost:175,dmg:130,rng:4.2,rate:.38,spd:4,splash:1.8,slow:0,chain:0,pc:'#ffaa00',uw:20,
     upg:[{c:140,l:'Heavy Charge',dmg:200,rng:4.8,splash:2.3},{c:280,l:'White Phosphorus',dmg:320,rng:5.5,splash:3.2}],
     desc:'Arcing shells with wide splash. Cannot miss clusters.'},
-  railgun:{id:'railgun',name:'Railgun',em:'🔬',col:'#204a6a',cost:240,dmg:220,rng:6.5,rate:.35,spd:0,splash:0,slow:0,chain:0,pc:'#00ffff',uw:10,pierce:true,
+  railgun:{id:'railgun',name:'Railgun',em:'🔬',col:'#204a6a',cost:240,dmg:220,rng:6.5,rate:.35,spd:0,splash:0,slow:0,chain:0,pc:'#00ffff',uw:30,pierce:true,
     upg:[{c:200,l:'Sabot Round',dmg:340,rng:7.5,rate:.45},{c:400,l:'Hypersonic Rod',dmg:560,rng:9,rate:.6}],
     desc:'Pierces ALL enemies in a line instantly.'},
-  emp:{id:'emp',name:'EMP Tower',em:'📡',col:'#3a2a7a',cost:200,dmg:35,rng:3.5,rate:.5,spd:0,splash:0,slow:0,chain:0,pc:'#ff88ff',uw:14,empStun:.0,empDur:2.2,
+  emp:{id:'emp',name:'EMP Tower',em:'📡',col:'#3a2a7a',cost:200,dmg:35,rng:3.5,rate:.5,spd:0,splash:0,slow:0,chain:0,pc:'#ff88ff',uw:40,empStun:.0,empDur:2.2,
     upg:[{c:160,l:'Overload Pulse',dmg:55,rng:4.2,empDur:3.2},{c:320,l:'Cascade EMP',dmg:90,rng:5.0,empDur:4.5}],
     desc:'Stuns all enemies in range. Strips alien shields.'},
-  drone:{id:'drone',name:'Drone Bay',em:'🛸',col:'#1a4a5a',cost:280,dmg:70,rng:4.0,rate:.7,spd:16,splash:.6,slow:0,chain:0,pc:'#44ffaa',uw:18,
+  drone:{id:'drone',name:'Drone Bay',em:'🛸',col:'#1a4a5a',cost:280,dmg:70,rng:4.0,rate:.7,spd:16,splash:.6,slow:0,chain:0,pc:'#44ffaa',uw:50,
     upg:[{c:220,l:'Combat Drones',dmg:110,rng:4.6,rate:.9,splash:.9},{c:440,l:'Swarm Protocol',dmg:180,rng:5.4,rate:1.2,splash:1.4}],
     desc:'Launches homing drones. Effective vs flyers & stealth.'}
 };
@@ -520,7 +520,7 @@ function dmgEnemy(e, d){
 }
 
 function killEnemy(e){
-  const rw=e.rw+Math.floor(wave*.8);
+  const rw=Math.floor((e.rw+Math.floor(wave*.8))*.75);
   gold+=rw;score+=rw*3;kills++;
   addPop(e.x,e.y-CELL*.4,`+${rw}`,'#ffd700');
   const n=e.boss?24:7;
@@ -2121,7 +2121,13 @@ function updSelInfo(){
     }selTile=null;
   }
   ub.style.display='none';sb.style.display='none';
-  info.textContent=selType?`${TD[selType].em} ${TD[selType].name} · ${TD[selType].desc}`:'Select a unit type, then tap the battlefield to deploy';
+  if(unlocked.size===0){
+    info.textContent='⚔️ Survive 3 waves to unlock your arsenal';
+  } else if(selType){
+    info.textContent=`${TD[selType].em} ${TD[selType].name} · ${TD[selType].desc}`;
+  } else {
+    info.textContent='Select a unit type, then tap the battlefield to deploy';
+  }
 }
 
 function showToast(msg){
@@ -2157,12 +2163,12 @@ function startGame(){
   document.getElementById('hud').style.display='flex';
   document.getElementById('cw').style.display='flex';
   document.getElementById('btm').style.display='block';
-  wave=0;lives=20;gold=330;score=0;kills=0;goldSpent=0;builtTowers=0;
+  wave=0;lives=5;gold=330;score=0;kills=0;goldSpent=0;builtTowers=0;
   swarmCooldown=0;swarmActive=false;
-  unlocked=new Set(['rifle','sniper']);selType=null;selTile=null;
+  unlocked=new Set(['rifle','mgun']);selType=null;selTile=null;
   towers=[];enemies=[];projs=[];parts=[];popups=[];bolts=[];
   waving=false;betTimer=0;spawnQ=[];spawnTmr=0;lastTs=0;eid=0;
-  document.getElementById('h-lives').textContent='20';
+  document.getElementById('h-lives').textContent='5';
   document.getElementById('h-score').textContent='0';
   document.getElementById('h-wave').textContent='—';
   document.getElementById('h-loc').textContent='—';
