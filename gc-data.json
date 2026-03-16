@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773664768875,
+  "updatedAt": 1773664846361,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -242,6 +242,12 @@
       }
     ],
     "custom-pickle-crosser-mmsjpjui": [
+      {
+        "email": "ahathaway21@gmail.com",
+        "displayName": "ahathaway21",
+        "score": 34,
+        "date": 1773664846337
+      },
       {
         "email": "thehathawayluke@gmail.com",
         "displayName": "thehathawayluke",
