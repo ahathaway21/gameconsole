@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+
+<meta name="game-name" content="Pickle Crossing">
+<meta name="game-emoji" content="🥒">
+<meta name="game-description" content="Collect coins, unlock pickle skins, and cross dangerous roads and rivers!">
+
+<title>🥒 Pickle Crossing</title>
+
+<style>
+html,body{
+margin:0;
+background:#111;
+overflow:hidden;
+font-family:sans-serif;
+color:white;
+touch-action:none;
+}
+
+canvas{
+display:block;
+width:100vw;
+height:100vh;
+}
+
+#ui{
+position:fixed;
+top:8px;
+left:0;
+right:0;
+text-align:center;
+font-weight:bold;
+}
+
+#controls{
+position:fixed;
+bottom:15px;
+left:50%;
+transform:translateX(-50%);
+display:grid;
+grid-template-columns:70px 70px 70px;
+gap:10px;
+}
+
+.btn{
+background:#333;
+padding:14px;
+border-radius:12px;
+text-align:center;
+font-size:22px;
+}
+
+#store{
+position:fixed;
+inset:0;
+background:#000e;
+display:none;
+overflow:auto;
+padding:20px;
+}
+
+.skin{
+background:#222;
+margin:10px 0;
+padding:12px;
+border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+Score: <span id="score">0</span> |
+Coins: <span id="coins">0</span>
+<button onclick="openStore()">Store</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="controls">
+<div></div>
+<div class="btn" data-dir="up">⬆️</div>
+<div></div>
+<div class="btn" data-dir="left">⬅️</div>
+<div class="btn" data-dir="down">⬇️</div>
+<div class="btn" data-dir="right">➡️</div>
+</div>
+
+<div id="store">
+<h2>🥒 Pickle Store</h2>
+<div id="skinList"></div>
+<button onclick="closeStore()">Close</button>
+</div>
+
+<script>
+
+/* CANVAS */
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let W,H,cell;
+
+function resize(){
+W=canvas.width=innerWidth;
+H=canvas.height=innerHeight;
+cell=Math.min(W,H)/12;
+}
+resize();
+addEventListener("resize",resize);
+
+/* AUDIO */
+
+const audio=new (window.AudioContext||window.webkitAudioContext)();
+
+function beep(freq,time){
+const o=audio.createOscillator();
+const g=audio.createGain();
+o.frequency.value=freq;
+o.type="square";
+o.connect(g);
+g.connect(audio.destination);
+g.gain.value=.08;
+o.start();
+o.stop(audio.currentTime+time);
+}
+
+const coinSound=()=>beep(900,.08);
+const moveSound=()=>beep(400,.05);
+const crashSound=()=>beep(120,.3);
+
+/* SAVE DATA */
+
+let coins=Number(localStorage.getItem("pickleCoins")||0);
+let owned=JSON.parse(localStorage.getItem("pickleOwned")||'["classic"]');
+let equipped=localStorage.getItem("pickleSkin")||"classic";
+
+function save(){
+localStorage.setItem("pickleCoins",coins);
+localStorage.setItem("pickleOwned",JSON.stringify(owned));
+localStorage.setItem("pickleSkin",equipped);
+}
+
+/* SKINS */
+
+const skins={
+classic:{color:"#4CAF50",price:0},
+gold:{color:"#FFD700",price:30},
+neon:{color:"#00E5FF",price:60},
+spicy:{color:"#FF5252",price:90}
+};
+
+/* GAME STATE */
+
+let score=0;
+let gameOver=false;
+
+const pickle={
+x:0,
+y:0,
+size:0
+};
+
+function resetPickle(){
+pickle.size=cell*.6;
+pickle.x=W/2-pickle.size/2;
+pickle.y=H-cell*1.5;
+}
+
+/* LANES */
+
+const types=["road","river","city"];
+const lanes=[];
+
+function createObjects(){
+const arr=[];
+for(let i=0;i<4;i++){
+arr.push({
+x:Math.random()*W,
+w:cell*(1+Math.random()),
+coin:Math.random()<0.3
+});
+}
+return arr;
+}
+
+function createLanes(){
+lanes.length=0;
+
+for(let i=0;i<10;i++){
+lanes.push({
+y:i*cell,
+type:types[Math.floor(Math.random()*3)],
+speed:(Math.random()*2+1)*(Math.random()<0.5?-1:1),
+objects:createObjects()
+});
+}
+}
+
+/* STORE */
+
+function openStore(){
+buildStore();
+document.getElementById("store").style.display="block";
+}
+
+function closeStore(){
+document.getElementById("store").style.display="none";
+}
+
+function buildStore(){
+
+const list=document.getElementById("skinList");
+list.innerHTML="";
+
+Object.entries(skins).forEach(([name,data])=>{
+
+const ownedSkin=owned.includes(name);
+
+const div=document.createElement("div");
+div.className="skin";
+
+div.innerHTML=`
+<b>${name}</b> —
+${ownedSkin?"Owned":"Cost: "+data.price+" coins"}
+<button>${equipped===name?"Equipped":ownedSkin?"Equip":"Buy"}</button>
+`;
+
+div.querySelector("button").onclick=()=>{
+
+if(!ownedSkin && coins>=data.price){
+coins-=data.price;
+owned.push(name);
+coinSound();
+}
+
+equipped=name;
+save();
+updateUI();
+buildStore();
+
+};
+
+list.appendChild(div);
+
+});
+
+}
+
+/* INPUT */
+
+function move(dir){
+
+if(gameOver)return;
+
+moveSound();
+
+if(dir==="up"){pickle.y-=cell;score++;}
+if(dir==="down")pickle.y+=cell;
+if(dir==="left")pickle.x-=cell;
+if(dir==="right")pickle.x+=cell;
+
+updateUI();
+
+}
+
+document.querySelectorAll(".btn").forEach(b=>{
+b.ontouchstart=e=>{
+e.preventDefault();
+move(b.dataset.dir);
+};
+});
+
+addEventListener("keydown",e=>{
+
+if(!gameOver){
+
+if(e.key==="ArrowUp")move("up");
+if(e.key==="ArrowDown")move("down");
+if(e.key==="ArrowLeft")move("left");
+if(e.key==="ArrowRight")move("right");
+
+}
+
+if(gameOver && e.code==="Space") startGame();
+
+});
+
+canvas.addEventListener("touchstart",()=>{
+if(gameOver) startGame();
+});
+
+/* COLLISION */
+
+function collide(a,b){
+return(
+a.x<b.x+b.w &&
+a.x+a.size>b.x &&
+a.y<b.y+cell &&
+a.y+a.size>b.y
+);
+}
+
+/* GAME FLOW */
+
+function startGame(){
+score=0;
+gameOver=false;
+resetPickle();
+createLanes();
+updateUI();
+requestAnimationFrame(loop);
+}
+
+function endGame(){
+
+crashSound();
+gameOver=true;
+
+window.parent.postMessage(
+{type:"GAME_OVER",score:score},
+"*"
+);
+
+}
+
+/* UPDATE */
+
+function update(){
+
+lanes.forEach(l=>{
+
+let onLog=false;
+
+l.objects.forEach(o=>{
+
+o.x+=l.speed;
+
+if(o.x>W+100)o.x=-100;
+if(o.x<-100)o.x=W+100;
+
+if(collide(pickle,{x:o.x,y:l.y,w:o.w})){
+
+if(o.coin){
+o.coin=false;
+coins++;
+coinSound();
+save();
+updateUI();
+}
+
+else if(l.type==="road"){
+endGame();
+}
+
+else if(l.type==="river"){
+onLog=true;
+pickle.x+=l.speed;
+}
+
+}
+
+});
+
+if(l.type==="river"){
+
+if(
+pickle.y<l.y+cell &&
+pickle.y+pickle.size>l.y
+){
+
+if(!onLog){
+endGame();
+}
+
+}
+
+}
+
+});
+
+if(pickle.y<0){
+score+=10;
+resetPickle();
+createLanes();
+}
+
+}
+
+/* DRAW PICKLE */
+
+function drawPickle(){
+
+const cx=pickle.x+pickle.size/2;
+const cy=pickle.y+pickle.size/2;
+
+ctx.fillStyle=skins[equipped].color;
+
+ctx.beginPath();
+ctx.ellipse(cx,cy,pickle.size*.22,pickle.size*.42,0,0,Math.PI*2);
+ctx.fill();
+
+ctx.fillStyle="rgba(255,255,255,.25)";
+ctx.beginPath();
+ctx.ellipse(cx-pickle.size*.06,cy-pickle.size*.08,pickle.size*.05,pickle.size*.15,0,0,Math.PI*2);
+ctx.fill();
+
+}
+
+/* DRAW LANES */
+
+function drawLane(l){
+
+if(l.type==="road")ctx.fillStyle="#2b2b2b";
+if(l.type==="river")ctx.fillStyle="#1e88e5";
+if(l.type==="city")ctx.fillStyle="#2e7d32";
+
+ctx.fillRect(0,l.y,W,cell);
+
+/* road stripes */
+
+if(l.type==="road"){
+ctx.strokeStyle="#ddd";
+ctx.lineWidth=3;
+ctx.setLineDash([20,15]);
+ctx.beginPath();
+ctx.moveTo(0,l.y+cell/2);
+ctx.lineTo(W,l.y+cell/2);
+ctx.stroke();
+ctx.setLineDash([]);
+}
+
+/* grass speckles */
+
+if(l.type==="city"){
+ctx.fillStyle="rgba(255,255,255,.05)";
+for(let i=0;i<30;i++){
+ctx.fillRect(Math.random()*W,l.y+Math.random()*cell,2,2);
+}
+}
+
+/* water waves */
+
+if(l.type==="river"){
+ctx.strokeStyle="rgba(255,255,255,.15)";
+for(let i=0;i<3;i++){
+ctx.beginPath();
+ctx.moveTo(0,l.y+10+i*15);
+for(let x=0;x<W;x+=20){
+ctx.lineTo(x,l.y+10+i*15+Math.sin((x+Date.now()/200)/20)*3);
+}
+ctx.stroke();
+}
+}
+
+/* objects */
+
+l.objects.forEach(o=>{
+
+ctx.fillStyle=l.type==="river"?"#8B5A2B":"#e53935";
+
+ctx.fillRect(o.x,l.y+cell*.2,o.w,cell*.6);
+
+if(l.type==="river"){
+ctx.strokeStyle="rgba(0,0,0,.2)";
+ctx.beginPath();
+ctx.moveTo(o.x,l.y+cell*.4);
+ctx.lineTo(o.x+o.w,l.y+cell*.4);
+ctx.stroke();
+}
+
+if(o.coin){
+
+ctx.fillStyle="gold";
+ctx.beginPath();
+ctx.arc(o.x+o.w/2,l.y+cell/2,cell*.15,0,Math.PI*2);
+ctx.fill();
+
+ctx.strokeStyle="#fff8";
+ctx.stroke();
+
+}
+
+});
+
+}
+
+/* UI */
+
+function updateUI(){
+document.getElementById("score").textContent=score;
+document.getElementById("coins").textContent=coins;
+}
+
+/* LOOP */
+
+function loop(){
+
+ctx.clearRect(0,0,W,H);
+
+lanes.forEach(drawLane);
+drawPickle();
+
+if(!gameOver){
+update();
+requestAnimationFrame(loop);
+}
+
+else{
+
+ctx.fillStyle="white";
+ctx.textAlign="center";
+ctx.font="28px sans-serif";
+ctx.fillText("Game Over",W/2,H/2);
+
+ctx.font="18px sans-serif";
+ctx.fillText("Tap Screen or Press Space",W/2,H/2+40);
+
+}
+
+}
+
+startGame();
+
+</script>
+
+</body>
+</html>
