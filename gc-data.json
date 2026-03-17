@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773772416832,
+  "updatedAt": 1773772445463,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -1242,6 +1242,16 @@
       "displayName": "ahathaway21",
       "email": "ahathaway21@gmail.com",
       "date": 1773759072234
+    },
+    {
+      "id": "mmuybeab6kv8",
+      "gameId": "custom-pickle-crosser-mmsjpjui",
+      "gameName": "Pickle Crosser",
+      "type": "bug",
+      "message": "Some of the coins don't get collected",
+      "displayName": "hathawaynoaha",
+      "email": "hathawaynoaha@gmail.com",
+      "date": 1773772445459
     }
   ],
   "ghConfig": {
