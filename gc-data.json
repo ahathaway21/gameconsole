@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773709079801,
+  "updatedAt": 1773709087390,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -553,6 +553,12 @@
         "displayName": "ahathaway21",
         "score": 2,
         "date": 1773664618544
+      },
+      {
+        "email": "thehathawayluke@gmail.com",
+        "displayName": "thehathawayluke",
+        "score": 2,
+        "date": 1773709087352
       },
       {
         "email": "thehathawayluke@gmail.com",
