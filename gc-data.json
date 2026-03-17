@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773771148017,
+  "updatedAt": 1773771159302,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -697,6 +697,12 @@
         "displayName": "hathawaynoaha",
         "score": 0,
         "date": 1773767796448
+      },
+      {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 0,
+        "date": 1773771159151
       }
     ],
     "custom-xeno-defense-mmtib6np": [
