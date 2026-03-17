@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1773772445463,
+  "updatedAt": 1773772494197,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -1252,6 +1252,16 @@
       "displayName": "hathawaynoaha",
       "email": "hathawaynoaha@gmail.com",
       "date": 1773772445459
+    },
+    {
+      "id": "mmuycfw1lipe",
+      "gameId": "custom-cat-blast-mms566hr",
+      "gameName": "Cat Blast",
+      "type": "bug",
+      "message": "Some times the game ends when I can make other moves :(",
+      "displayName": "hathawaynoaha",
+      "email": "hathawaynoaha@gmail.com",
+      "date": 1773772494193
     }
   ],
   "ghConfig": {
