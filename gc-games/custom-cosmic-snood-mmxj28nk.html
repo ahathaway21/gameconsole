@@ -29,8 +29,6 @@ html,body{
 .hud-block{display:flex;flex-direction:column;align-items:center;min-width:44px;}
 .hud-label{font-size:7px;letter-spacing:2px;color:rgba(100,200,255,0.55);}
 .hud-val{font-size:17px;color:#fff;line-height:1.1;}
-#lives-row{display:flex;gap:3px;margin-top:2px;}
-.heart{font-size:14px;line-height:1;}
 
 #timer-wrap{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
@@ -48,7 +46,7 @@ html,body{
   background:linear-gradient(90deg,#00d4ff,#0066ff);
 }
 
-#pause-btn{
+#pause-btn, #mute-btn{
   background:rgba(0,100,200,0.2);
   border:1px solid rgba(0,180,255,0.35);
   color:rgba(0,220,255,0.9);
@@ -57,8 +55,8 @@ html,body{
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;transition:background .15s;
 }
-#pause-btn:active{background:rgba(0,150,255,0.35);}
-#pause-btn svg{width:14px;height:14px;fill:currentColor;}
+#pause-btn:active, #mute-btn:active{background:rgba(0,150,255,0.35);}
+#pause-btn svg, #mute-btn svg{width:14px;height:14px;fill:currentColor;}
 
 #canvas-wrap{position:relative;flex:1;width:100%;max-width:480px;overflow:hidden;}
 canvas{display:block;width:100%;height:100%;}
@@ -114,6 +112,11 @@ canvas{display:block;width:100%;height:100%;}
     <span class="hud-val" id="level-val">1</span>
   </div>
 
+  <div class="hud-block">
+    <span class="hud-label">LEFT</span>
+    <span class="hud-val" id="left-val">—</span>
+  </div>
+
   <div id="timer-wrap">
     <div id="timer-label-row">
       <span id="timer-label">⚠ DROP IN</span>
@@ -122,11 +125,9 @@ canvas{display:block;width:100%;height:100%;}
     <div id="timer-bar-bg"><div id="timer-bar"></div></div>
   </div>
 
-  <div class="hud-block">
-    <span class="hud-label">LIVES</span>
-    <div id="lives-row"></div>
-  </div>
-
+  <button id="mute-btn" title="Mute (M)">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+  </button>
   <button id="pause-btn" title="Pause (P)">
     <svg viewBox="0 0 24 24"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
   </button>
@@ -151,12 +152,14 @@ canvas{display:block;width:100%;height:100%;}
 // ================================================================
 const SFX = (() => {
   let ac = null;
+  let muted = false;
   function ctx() {
     if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
     if (ac.state === 'suspended') ac.resume();
     return ac;
   }
   function osc(freq, type, dur, vol, t0, freqEnd) {
+    if (muted) return;
     try {
       const c = ctx(), o = c.createOscillator(), g = c.createGain();
       o.connect(g); g.connect(c.destination);
@@ -170,6 +173,7 @@ const SFX = (() => {
     } catch(e) {}
   }
   function burst(dur, vol) {
+    if (muted) return;
     try {
       const c = ctx(), len = Math.floor(c.sampleRate * dur);
       const buf = c.createBuffer(1, len, c.sampleRate);
@@ -209,6 +213,8 @@ const SFX = (() => {
     },
     pause()  { osc(520, 'square', 0.05, 0.06); },
     resume() { osc(620, 'square', 0.05, 0.06); },
+    toggleMute(){ muted=!muted; return muted; },
+    isMuted(){ return muted; },
   };
 })();
 
@@ -223,6 +229,17 @@ const rowWarning = document.getElementById('row-warning');
 
 const COLS     = 9;
 const SQ3      = Math.sqrt(3);
+// Cross-browser rounded rect (roundRect not available on all mobile WebViews)
+function rrect(x,y,w,h,r){
+  ctx2d.beginPath();
+  ctx2d.moveTo(x+r,y);
+  ctx2d.lineTo(x+w-r,y); ctx2d.arcTo(x+w,y,x+w,y+r,r);
+  ctx2d.lineTo(x+w,y+h-r); ctx2d.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx2d.lineTo(x+r,y+h); ctx2d.arcTo(x,y+h,x,y+h-r,r);
+  ctx2d.lineTo(x,y+r); ctx2d.arcTo(x,y,x+r,y,r);
+  ctx2d.closePath();
+}
+
 // Timer duration scales with level bracket (every 5 levels adds 1 minute)
 // Levels 1-5 → 60s, 6-10 → 120s, 11-15 → 180s, …
 function dropMsForLevel(lvl) { return Math.ceil(lvl / 5) * 60 * 1000; }
@@ -365,12 +382,15 @@ class RowDropAnim {
 // ================================================================
 class Game {
   constructor(){
-    this.grid=[]; this.score=0; this.level=1; this.lives=3;
+    this.grid=[]; this.score=0; this.level=1;
     this.combo=0;
     this.particles=[]; this.fallers=[]; this.flashes=[]; this.dropAnim=null;
     this.proj=null; this.angle=-Math.PI/2;
     this.shootColor=this.rndColor(); this.nextColor=this.rndColor();
     this.shooting=false; this.over=false; this.shake=0;
+    this.levelTransition=false;
+    this.transitionMs=0;
+    this.levelClearBonus=0;
 
     // Drop timer (milliseconds) — reset properly via resetTimer()
     this.dropMs   = 0;
@@ -409,19 +429,18 @@ class Game {
   isGridClear(){
     for(let r=0;r<TOTAL_ROWS;r++)
       for(let c=0;c<gcols(r);c++)
-        if(this.grid[r][c]!==null) return false;
+        if(this.grid[r]&&this.grid[r][c]!=null) return false;
     return true;
   }
 
   // ---------- Timer -----------------------------------------------
   tickTimer(dt){
-    if(this.over||this.dropAnim) return;
+    if(this.over||this.dropAnim||this.levelTransition) return;
     this.dropMs -= dt;
     const frac = Math.max(0, this.dropMs/this.dropFull);
     this.updateTimerUI(frac);
-
     if(this.dropMs<=15000 && !this.warnDone){ this.warnDone=true; SFX.warn(); }
-    if(this.dropMs<=0){ this.dropMs=this.dropFull; this.warnDone=false; this.addRow(); }
+    if(this.dropMs<=0){ this.warnDone=false; this.addRow(); }
   }
 
   updateTimerUI(frac){
@@ -436,18 +455,29 @@ class Game {
   }
 
   addRow(){
+    if(this.levelTransition||this.over) return;
     SFX.rowDrop();
     this.shake=9;
+    // Ensure grid length matches TOTAL_ROWS
+    while(this.grid.length<TOTAL_ROWS) this.grid.push(new Array(gcols(this.grid.length)).fill(null));
+    while(this.grid.length>TOTAL_ROWS) this.grid.pop();
     const lastR=this.grid[TOTAL_ROWS-1];
-    if(lastR.some(c=>c!==null)){ this.triggerOver(); return; }
-    const newRow=Array.from({length:COLS},()=>this.rndColor());
+    if(!lastR||lastR.some(c=>c!=null)){ this.triggerOver(); return; }
+    const newRow=Array.from({length:gcols(0)},()=>this.rndColor());
     this.grid.pop();
     this.grid.unshift(newRow);
+    // After unshift every row's parity flips. Pad any row that is now too
+    // short so grid[r][c] is always null (never undefined) for c < gcols(r).
+    for(let r=0;r<this.grid.length;r++){
+      const need=gcols(r);
+      while(this.grid[r].length<need) this.grid[r].push(null);
+    }
     this.dropAnim=new RowDropAnim(newRow);
     this.flashes.push(new Flash('INCOMING!','#ff6600'));
-    // Reset the countdown for the next drop
+    // Reset the countdown and immediately show full bar
     const ms=dropMsForLevel(this.level);
     this.dropMs=ms; this.dropFull=ms; this.warnDone=false;
+    this.updateTimerUI(1);
     this.checkGameOver();
     this.updateHUD();
   }
@@ -461,9 +491,9 @@ class Game {
   }
 
   shoot(){
-    if(this.shooting||this.over||this.proj||this.dropAnim) return;
+    if(this.shooting||this.over||this.proj||this.dropAnim||this.levelTransition) return;
     SFX.shoot();
-    const sp=R*.52;
+    const sp=R*1.1;
     this.proj={x:W/2,y:H-R*2.2,vx:Math.cos(this.angle)*sp,vy:Math.sin(this.angle)*sp,ci:this.shootColor,trail:[]};
     this.shootColor=this.nextColor; this.nextColor=this.rndColor(); this.shooting=true;
   }
@@ -472,17 +502,21 @@ class Game {
     if(!this.proj) return;
     const p=this.proj;
     p.trail.push({x:p.x,y:p.y}); if(p.trail.length>10) p.trail.shift();
-    for(let s=0;s<5;s++){
-      p.x+=p.vx/5; p.y+=p.vy/5;
+    for(let s=0;s<10;s++){
+      p.x+=p.vx/10; p.y+=p.vy/10;
       if(p.x-R*.88<0)  {p.x=R*.88;   p.vx= Math.abs(p.vx);}
       if(p.x+R*.88>W)  {p.x=W-R*.88; p.vx=-Math.abs(p.vx);}
       if(p.y-R*.88<=0) {p.y=R*.88; this.place(p); return;}
       let hit=false;
       for(let r=0;r<TOTAL_ROWS&&!hit;r++)
         for(let c=0;c<gcols(r)&&!hit;c++){
-          if(this.grid[r][c]===null) continue;
+          if(!this.grid[r]||this.grid[r][c]==null) continue;
           const dx=p.x-bx(c,r),dy=p.y-by(r);
-          if(dx*dx+dy*dy<(R*1.72)*(R*1.72)){this.place(p);hit=true;}
+          if(dx*dx+dy*dy<(R*1.72)*(R*1.72)){
+            // Hitting a bubble that's at/below the danger line → instant game over
+            if(by(r)>=H-R*4.5){ this.proj=null; this.shooting=false; this.triggerOver(); return; }
+            this.place(p); hit=true;
+          }
         }
       if(hit) return;
     }
@@ -490,20 +524,24 @@ class Game {
   }
 
   place(p){
+    if(this.levelTransition||this.over){ this.proj=null; this.shooting=false; return; }
     const seen=new Set(),cands=[];
     const add=(r,c)=>{const k=`${r},${c}`;if(!seen.has(k)){seen.add(k);cands.push([r,c]);}};
-    for(let c=0;c<gcols(0);c++) if(this.grid[0][c]===null) add(0,c);
+    for(let c=0;c<gcols(0);c++) if(this.grid[0]&&this.grid[0][c]==null) add(0,c);
     for(let r=0;r<TOTAL_ROWS;r++)
       for(let c=0;c<gcols(r);c++){
-        if(this.grid[r][c]===null) continue;
-        neighbors(r,c,TOTAL_ROWS).forEach(([nr,nc])=>{if(this.grid[nr][nc]===null)add(nr,nc);});
+        if(!this.grid[r]||this.grid[r][c]==null) continue;
+        neighbors(r,c,TOTAL_ROWS).forEach(([nr,nc])=>{if(this.grid[nr]&&this.grid[nr][nc]==null)add(nr,nc);});
       }
     let best=null,bestD=Infinity;
     cands.forEach(([r,c])=>{const d=(p.x-bx(c,r))**2+(p.y-by(r))**2;if(d<bestD){bestD=d;best=[r,c];}});
-    if(!best){this.proj=null;this.shooting=false;this.loseLife();return;}
+    // If no slot found, or the nearest slot is unreasonably far (teleport bug), end the game
+    if(!best||bestD>(R*2.5)*(R*2.5)){this.proj=null;this.shooting=false;this.triggerOver();return;}
     const [pr,pc]=best;
     this.grid[pr][pc]=p.ci; this.proj=null;
     SFX.land();
+    // If the bubble landed at or below the danger line → instant game over
+    if(by(pr) >= H - R * 4.5){ this.triggerOver(); return; }
     for(let i=0;i<5;i++) this.particles.push(new Particle(bx(pc,pr),by(pr),PAL[p.ci][1]));
     const matched=this.flood(pr,pc,p.ci);
     if(matched.length>=3) this.pop(matched,p.ci);
@@ -516,9 +554,9 @@ class Game {
     while(q.length){
       const [r,c]=q.shift(),k=`${r},${c}`;
       if(vis.has(k)) continue; vis.add(k);
-      if(this.grid[r][c]!==ci) continue;
+      if(!this.grid[r]||this.grid[r][c]!=ci) continue;
       res.push([r,c]);
-      neighbors(r,c,TOTAL_ROWS).forEach(([nr,nc])=>{if(!vis.has(`${nr},${nc}`)&&this.grid[nr][nc]===ci)q.push([nr,nc]);});
+      neighbors(r,c,TOTAL_ROWS).forEach(([nr,nc])=>{if(!vis.has(`${nr},${nc}`)&&this.grid[nr]&&this.grid[nr][nc]==ci)q.push([nr,nc]);});
     }
     return res;
   }
@@ -546,11 +584,14 @@ class Game {
     // Level complete when every bubble has been cleared
     if(this.isGridClear()){
       this.combo=0;
+      // Time bonus: remaining seconds × 5 pts
+      const bonusPts = Math.floor((this.dropMs/1000)) * 5;
+      this.score += bonusPts;
       this.level++;
       SFX.levelUp();
-      this.flashes.push(new Flash(`LEVEL ${this.level}!`,'#44ff99'));
-      // Brief pause before spawning next level so the clear is visible
-      setTimeout(()=>{ if(!this.over){ this.initLevel(); this.updateHUD(); } }, 900);
+      this.levelTransition=true;
+      this.transitionMs=1200;
+      this.levelClearBonus=bonusPts;
     } else {
       this.checkGameOver();
     }
@@ -559,30 +600,26 @@ class Game {
 
   findOrphans(){
     const conn=new Set(),q=[];
-    for(let c=0;c<gcols(0);c++) if(this.grid[0][c]!==null){conn.add(`0,${c}`);q.push([0,c]);}
+    for(let c=0;c<gcols(0);c++) if(this.grid[0]&&this.grid[0][c]!=null){conn.add(`0,${c}`);q.push([0,c]);}
     while(q.length){
       const [r,c]=q.shift();
       neighbors(r,c,TOTAL_ROWS).forEach(([nr,nc])=>{
-        const k=`${nr},${nc}`;if(!conn.has(k)&&this.grid[nr][nc]!==null){conn.add(k);q.push([nr,nc]);}
+        const k=`${nr},${nc}`;if(!conn.has(k)&&this.grid[nr]&&this.grid[nr][nc]!=null){conn.add(k);q.push([nr,nc]);}
       });
     }
     const out=[];
     for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
-      if(this.grid[r][c]!==null&&!conn.has(`${r},${c}`)) out.push([r,c]);
+      if(this.grid[r]&&this.grid[r][c]!=null&&!conn.has(`${r},${c}`)) out.push([r,c]);
     return out;
   }
 
   checkGameOver(){
-    const limit=H-R*4.8;
+    const limit = H - R * 4.5; // just above shooter
     for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
-      if(this.grid[r][c]!==null&&by(r)>limit){this.triggerOver();return;}
+      if(this.grid[r]&&this.grid[r][c]!=null&&by(r)>=limit){this.triggerOver();return;}
   }
 
-  loseLife(){
-    this.lives--; this.shake=12;
-    if(this.lives<=0) this.triggerOver();
-    else {this.flashes.push(new Flash('LIFE LOST!','#ff4455'));this.updateHUD();}
-  }
+  loseLife(){ this.triggerOver(); }
 
   triggerOver(){
     if(this.over) return; this.over=true;
@@ -603,21 +640,28 @@ class Game {
   updateHUD(){
     document.getElementById('score-val').textContent=this.score.toLocaleString();
     document.getElementById('level-val').textContent=this.level;
-    const lr=document.getElementById('lives-row'); lr.innerHTML='';
-    for(let i=0;i<3;i++){
-      const s=document.createElement('span'); s.className='heart';
-      s.textContent=i<this.lives?'♥':'♡';
-      s.style.color=i<this.lives?'#ff4488':'rgba(255,100,150,0.25)';
-      lr.appendChild(s);
-    }
-    // Show the current drop interval bracket in the label
-    const mins = Math.ceil(this.level/5);
+    let rem=0;
+    for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
+      if(this.grid[r]&&this.grid[r][c]!=null) rem++;
+    document.getElementById('left-val').textContent=rem||'—';
+    const mins=Math.ceil(this.level/5);
     document.getElementById('timer-label').textContent=`⚠ DROP/${mins}m`;
   }
 
   // ---------- Main update -----------------------------------------
   update(dt){
     if(this.over) return;
+    // Level-transition cooldown (blocks timer & shooting after board clear)
+    if(this.levelTransition){
+      this.transitionMs-=dt;
+      if(this.transitionMs<=0){ this.levelTransition=false; this.initLevel(); this.updateHUD(); }
+      // Still animate particles/fallers/flashes during transition
+      this.particles=this.particles.filter(p=>{p.update();return p.life>0;});
+      this.fallers  =this.fallers.filter  (f=>{f.update();return f.life>0;});
+      this.flashes  =this.flashes.filter  (f=>{f.update();return f.life>0;});
+      if(this.shake>0) this.shake--;
+      return;
+    }
     this.updateProj();
     this.tickTimer(dt);
     this.particles=this.particles.filter(p=>{p.update();return p.life>0;});
@@ -645,34 +689,85 @@ class Game {
       nb.addColorStop(0,nc);nb.addColorStop(1,'transparent');
       ctx2d.fillStyle=nb;ctx2d.fillRect(0,0,W,H);
     });
-    // Danger line
+    // Shooter-level danger line — faint always, pulses red when a bubble is near
+    const shooterY = H - R * 4.5;
+    let closestDist = Infinity;
+    for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
+      if(this.grid[r]&&this.grid[r][c]!=null){
+        const d = shooterY - by(r);
+        if(d>0 && d<closestDist) closestDist=d;
+      }
+    const danger = Math.max(0, 1 - closestDist / (R*6)); // 0=safe 1=touching
+    const pulse  = 0.5 + 0.5 * Math.sin(Date.now()*0.008);
+    const lineAlpha = 0.12 + danger * 0.55 * pulse;
     ctx2d.save();
-    ctx2d.strokeStyle='rgba(255,60,60,0.25)';ctx2d.setLineDash([5,6]);ctx2d.lineWidth=1;
-    ctx2d.beginPath();ctx2d.moveTo(0,H-R*4.8);ctx2d.lineTo(W,H-R*4.8);ctx2d.stroke();
-    ctx2d.setLineDash([]);ctx2d.restore();
+    ctx2d.strokeStyle = danger > 0.3
+      ? `rgba(255,50,50,${lineAlpha})`
+      : `rgba(255,255,255,${lineAlpha})`;
+    ctx2d.setLineDash([6,8]); ctx2d.lineWidth = 1.5;
+    ctx2d.beginPath(); ctx2d.moveTo(0,shooterY); ctx2d.lineTo(W,shooterY); ctx2d.stroke();
+    ctx2d.setLineDash([]); ctx2d.restore();
     // Grid
     for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
-      if(this.grid[r][c]!==null) drawBubble(bx(c,r),by(r),this.grid[r][c]);
+      if(this.grid[r]&&this.grid[r][c]!=null) drawBubble(bx(c,r),by(r),this.grid[r][c]);
     // Drop anim
     if(this.dropAnim) this.dropAnim.draw();
-    // Aim
-    if(!this.shooting&&!this.proj&&!this.over&&!this.dropAnim) this.drawAim();
-    // Projectile
-    if(this.proj){
-      const p=this.proj;
-      p.trail.forEach((pt,i)=>{
-        const a=(i/p.trail.length)*.5;
-        ctx2d.save();ctx2d.globalAlpha=a;ctx2d.fillStyle=PAL[p.ci][1];
-        ctx2d.shadowColor=PAL[p.ci][1];ctx2d.shadowBlur=4;
-        ctx2d.beginPath();ctx2d.arc(pt.x,pt.y,R*.3*(i/p.trail.length),0,Math.PI*2);ctx2d.fill();
-        ctx2d.restore();
-      });
-      drawBubble(p.x,p.y,p.ci);
+    // Aim + launcher — hidden during level transition
+    if(!this.levelTransition){
+      if(!this.shooting&&!this.proj&&!this.over&&!this.dropAnim) this.drawAim();
+      // Projectile
+      if(this.proj){
+        const p=this.proj;
+        p.trail.forEach((pt,i)=>{
+          const a=(i/p.trail.length)*.5;
+          ctx2d.save();ctx2d.globalAlpha=a;ctx2d.fillStyle=PAL[p.ci][1];
+          ctx2d.shadowColor=PAL[p.ci][1];ctx2d.shadowBlur=4;
+          ctx2d.beginPath();ctx2d.arc(pt.x,pt.y,R*.3*(i/p.trail.length),0,Math.PI*2);ctx2d.fill();
+          ctx2d.restore();
+        });
+        drawBubble(p.x,p.y,p.ci);
+      }
+      this.drawLauncher();
     }
-    this.drawLauncher();
+
     this.particles.forEach(p=>p.draw());
     this.fallers.forEach(f=>f.draw());
     this.flashes.forEach(f=>f.draw());
+
+    // Level-complete overlay
+    if(this.levelTransition){
+      const prog = 1 - (this.transitionMs/1200);
+      const alpha = Math.min(1, prog*3);
+      ctx2d.save();
+      ctx2d.fillStyle=`rgba(2,7,18,${alpha*0.6})`;
+      ctx2d.fillRect(0,0,W,H);
+      // Pulsing ring
+      const ring = prog * R * 14;
+      ctx2d.strokeStyle=`rgba(68,255,153,${(1-prog)*0.6})`;
+      ctx2d.lineWidth=3;
+      ctx2d.beginPath();ctx2d.arc(W/2,H/2,ring,0,Math.PI*2);ctx2d.stroke();
+      // Title
+      ctx2d.globalAlpha=Math.min(1,alpha*2);
+      ctx2d.font=`900 ${Math.floor(R*1.6)}px Orbitron,monospace`;
+      ctx2d.textAlign='center';
+      ctx2d.fillStyle='#44ff99';
+      ctx2d.shadowColor='#44ff99'; ctx2d.shadowBlur=32;
+      ctx2d.fillText('CLEARED!',W/2,H/2-R*.8);
+      ctx2d.shadowBlur=0;
+      // Level number
+      ctx2d.font=`700 ${Math.floor(R*.75)}px Orbitron,monospace`;
+      ctx2d.fillStyle='rgba(200,255,220,0.85)';
+      ctx2d.fillText(`LEVEL ${this.level} STARTS NEXT`,W/2,H/2+R*.2);
+      // Bonus
+      if(this.levelClearBonus>0){
+        ctx2d.font=`700 ${Math.floor(R*.65)}px Orbitron,monospace`;
+        ctx2d.fillStyle='#ffdd44';
+        ctx2d.shadowColor='#ffdd44'; ctx2d.shadowBlur=14;
+        ctx2d.fillText(`TIME BONUS +${this.levelClearBonus.toLocaleString()}`,W/2,H/2+R*1.15);
+        ctx2d.shadowBlur=0;
+      }
+      ctx2d.restore();
+    }
 
     // Pause veil
     if(paused){
@@ -707,23 +802,163 @@ class Game {
 
   drawLauncher(){
     const sx=W/2,sy=H-R*2.2;
+    const [fillC,glowC] = PAL[this.shootColor];
+
+    // Platform base
     ctx2d.save();
     ctx2d.fillStyle='rgba(0,120,255,0.1)';ctx2d.strokeStyle='rgba(0,200,255,0.35)';ctx2d.lineWidth=1.5;
-    ctx2d.beginPath();ctx2d.roundRect(sx-R*3,sy+R*.75,R*6,R*1.6,6);ctx2d.fill();ctx2d.stroke();
+    rrect(sx-R*3,sy+R*.75,R*6,R*1.6,6);ctx2d.fill();ctx2d.stroke();
     ctx2d.restore();
+
+    // Glowing color ring around baby head — shows current shoot color
+    ctx2d.save();
+    ctx2d.shadowColor=glowC; ctx2d.shadowBlur=R*1.2;
+    ctx2d.strokeStyle=fillC; ctx2d.lineWidth=Math.max(2,R*.14);
+    ctx2d.beginPath(); ctx2d.arc(sx,sy,R*.98,0,Math.PI*2); ctx2d.stroke();
+    ctx2d.shadowBlur=0; ctx2d.restore();
+
+    // Aim barrel
     ctx2d.save();
     ctx2d.strokeStyle='rgba(80,200,255,0.75)';ctx2d.lineWidth=Math.max(3,R*.15);
     ctx2d.lineCap='round';ctx2d.shadowColor='#00ccff';ctx2d.shadowBlur=10;
     ctx2d.beginPath();ctx2d.moveTo(sx,sy);
     ctx2d.lineTo(sx+Math.cos(this.angle)*R*1.6,sy+Math.sin(this.angle)*R*1.6);
     ctx2d.stroke();ctx2d.restore();
-    drawBubble(sx,sy,this.shootColor,1,.9);
+
+    // Creepy baby face
+    drawBabyFace(sx, sy, R, this.angle);
+
+    // FIRE label + current-color swatch (left side, mirrors NEXT on right)
     ctx2d.fillStyle='rgba(100,200,255,0.5)';
     ctx2d.font=`${Math.max(7,R*.38)}px Orbitron,monospace`;
     ctx2d.textAlign='center';
+    ctx2d.fillText('FIRE', sx-R*2.9, sy+R*.25);
+    drawBubble(sx-R*2.9, sy+R*1.05, this.shootColor, 1, .58);
+
+    // NEXT label + preview bubble (right side)
+    ctx2d.fillStyle='rgba(100,200,255,0.5)';
     ctx2d.fillText('NEXT',sx+R*2.9,sy+R*.25);
     drawBubble(sx+R*2.9,sy+R*1.05,this.nextColor,.9,.58);
   }
+}
+
+// ================================================================
+//  CREEPY BABY FACE SHOOTER
+// ================================================================
+function drawBabyFace(x, y, r, angle) {
+  ctx2d.save();
+  ctx2d.translate(x, y);
+
+  const now = Date.now();
+
+  // Slight sway based on aim angle
+  const tilt = angle * 0.18;
+  ctx2d.rotate(tilt);
+
+  // Head — pale, slightly sickly skin
+  const headGr = ctx2d.createRadialGradient(-r*.2,-r*.25,r*.05, 0,0,r*.95);
+  headGr.addColorStop(0,'#f5e8c8');
+  headGr.addColorStop(0.6,'#d4b896');
+  headGr.addColorStop(1,'#a07850');
+  ctx2d.shadowColor='rgba(180,120,60,0.5)'; ctx2d.shadowBlur=r*.8;
+  ctx2d.beginPath(); ctx2d.arc(0,0,r*.9,0,Math.PI*2);
+  ctx2d.fillStyle=headGr; ctx2d.fill();
+  ctx2d.shadowBlur=0;
+
+  // Skull bumps / baby head shape — big forehead
+  ctx2d.beginPath(); ctx2d.arc(0,-r*.55,r*.5,Math.PI,0);
+  ctx2d.fillStyle='rgba(245,232,200,0.18)'; ctx2d.fill();
+
+  // Veins — faint greenish lines on forehead
+  ctx2d.strokeStyle='rgba(80,140,80,0.18)'; ctx2d.lineWidth=Math.max(1,r*.04);
+  ctx2d.beginPath(); ctx2d.moveTo(-r*.3,-r*.55); ctx2d.quadraticCurveTo(-r*.15,-r*.2,-r*.25,-r*.1); ctx2d.stroke();
+  ctx2d.beginPath(); ctx2d.moveTo( r*.2,-r*.5);  ctx2d.quadraticCurveTo( r*.1,-r*.25, r*.2,-r*.05); ctx2d.stroke();
+
+  // — EYES —
+  const blinkCycle = Math.sin(now * 0.0008);
+  const eyeH = blinkCycle > 0.85 ? 0.5 : 1; // blink
+  const eyeW = r * .17;
+  const eyeY = -r * .14;
+  const leftEX = -r*.28, rightEX = r*.28;
+
+  // Eye whites
+  ctx2d.fillStyle='rgba(230,220,200,0.95)';
+  ctx2d.beginPath(); ctx2d.ellipse(leftEX,  eyeY, eyeW, eyeW*eyeH, 0, 0, Math.PI*2); ctx2d.fill();
+  ctx2d.beginPath(); ctx2d.ellipse(rightEX, eyeY, eyeW, eyeW*eyeH, 0, 0, Math.PI*2); ctx2d.fill();
+
+  if(eyeH > 0.5){
+    // Pupils — slightly misaligned for creepiness
+    ctx2d.fillStyle='#1a0a00';
+    ctx2d.beginPath(); ctx2d.ellipse(leftEX-r*.02,  eyeY+r*.02, eyeW*.55, eyeW*.55*eyeH, 0, 0, Math.PI*2); ctx2d.fill();
+    ctx2d.beginPath(); ctx2d.ellipse(rightEX+r*.03, eyeY-r*.01, eyeW*.55, eyeW*.55*eyeH, 0, 0, Math.PI*2); ctx2d.fill();
+
+    // Irises — pale glassy
+    ctx2d.fillStyle='rgba(160,200,160,0.6)';
+    ctx2d.beginPath(); ctx2d.ellipse(leftEX-r*.02,  eyeY+r*.02, eyeW*.38, eyeW*.38*eyeH, 0, 0, Math.PI*2); ctx2d.fill();
+    ctx2d.beginPath(); ctx2d.ellipse(rightEX+r*.03, eyeY-r*.01, eyeW*.38, eyeW*.38*eyeH, 0, 0, Math.PI*2); ctx2d.fill();
+
+    // Catchlights — tiny, off-centre
+    ctx2d.fillStyle='rgba(255,255,255,0.9)';
+    ctx2d.beginPath(); ctx2d.arc(leftEX+r*.04,  eyeY-r*.06, r*.04, 0, Math.PI*2); ctx2d.fill();
+    ctx2d.beginPath(); ctx2d.arc(rightEX+r*.06, eyeY-r*.05, r*.04, 0, Math.PI*2); ctx2d.fill();
+
+    // Under-eye bags
+    ctx2d.strokeStyle='rgba(120,80,50,0.25)'; ctx2d.lineWidth=Math.max(1,r*.04);
+    ctx2d.beginPath(); ctx2d.arc(leftEX,  eyeY+eyeW*.5, eyeW*.7, 0.1, Math.PI-.1); ctx2d.stroke();
+    ctx2d.beginPath(); ctx2d.arc(rightEX, eyeY+eyeW*.5, eyeW*.7, 0.1, Math.PI-.1); ctx2d.stroke();
+  }
+
+  // Eyebrows — furrowed inward
+  ctx2d.strokeStyle='rgba(80,50,20,0.7)'; ctx2d.lineWidth=Math.max(1.5,r*.07); ctx2d.lineCap='round';
+  ctx2d.beginPath(); ctx2d.moveTo(leftEX-r*.18, eyeY-r*.22); ctx2d.lineTo(leftEX+r*.1,  eyeY-r*.28); ctx2d.stroke();
+  ctx2d.beginPath(); ctx2d.moveTo(rightEX+r*.18,eyeY-r*.22); ctx2d.lineTo(rightEX-r*.1, eyeY-r*.28); ctx2d.stroke();
+
+  // Nose — tiny button
+  ctx2d.fillStyle='rgba(160,100,60,0.4)';
+  ctx2d.beginPath(); ctx2d.ellipse(0, r*.08, r*.08, r*.05, 0, 0, Math.PI*2); ctx2d.fill();
+  ctx2d.fillStyle='rgba(80,40,20,0.35)';
+  ctx2d.beginPath(); ctx2d.ellipse(-r*.055, r*.09, r*.035, r*.03, -0.3, 0, Math.PI*2); ctx2d.fill();
+  ctx2d.beginPath(); ctx2d.ellipse( r*.055, r*.09, r*.035, r*.03,  0.3, 0, Math.PI*2); ctx2d.fill();
+
+  // Mouth — unsettling wide open, showing teeth
+  ctx2d.save();
+  const mouthOpen = 0.42 + 0.08*Math.sin(now*0.0012); // breathes slightly
+  ctx2d.beginPath();
+  ctx2d.ellipse(0, r*.38, r*.32, r*mouthOpen, 0, 0, Math.PI*2);
+  ctx2d.fillStyle='#1a0808'; ctx2d.fill();
+  // Teeth — uneven
+  ctx2d.fillStyle='rgba(220,215,200,0.92)';
+  const tw=r*.09;
+  for(let t=-1;t<=1;t++){
+    const th = t===0 ? r*.13 : r*.10;
+    const tx = t*r*.185;
+    ctx2d.beginPath();
+    ctx2d.rect(tx-tw*.5, r*.28, tw, th);
+    ctx2d.fill();
+  }
+  // Bottom teeth — fewer, crooked
+  ctx2d.fillStyle='rgba(200,195,178,0.75)';
+  ctx2d.save(); ctx2d.translate(-r*.08, r*.48); ctx2d.rotate(0.1);
+  ctx2d.beginPath(); ctx2d.rect(-tw*.45,0,tw*.9,r*.09); ctx2d.fill(); ctx2d.restore();
+  ctx2d.save(); ctx2d.translate(r*.08, r*.46); ctx2d.rotate(-0.08);
+  ctx2d.beginPath(); ctx2d.rect(-tw*.45,0,tw*.9,r*.09); ctx2d.fill(); ctx2d.restore();
+  // Saliva string — thin droopy line
+  ctx2d.strokeStyle='rgba(180,220,255,0.35)'; ctx2d.lineWidth=Math.max(1,r*.025);
+  ctx2d.beginPath(); ctx2d.moveTo(r*.04,r*.38+r*.04); ctx2d.quadraticCurveTo(r*.06,r*.55,r*.03,r*.65); ctx2d.stroke();
+  ctx2d.restore();
+
+  // Chubby cheek blush
+  ctx2d.fillStyle='rgba(220,100,80,0.12)';
+  ctx2d.beginPath(); ctx2d.ellipse(-r*.5, r*.18, r*.22, r*.14, -0.3, 0, Math.PI*2); ctx2d.fill();
+  ctx2d.beginPath(); ctx2d.ellipse( r*.5, r*.18, r*.22, r*.14,  0.3, 0, Math.PI*2); ctx2d.fill();
+
+  // Baby hair — a few scraggly strands
+  ctx2d.strokeStyle='rgba(80,50,20,0.55)'; ctx2d.lineWidth=Math.max(1,r*.04); ctx2d.lineCap='round';
+  ctx2d.beginPath(); ctx2d.moveTo(-r*.18,-r*.88); ctx2d.quadraticCurveTo(-r*.3,-r*1.1,-r*.15,-r*1.0); ctx2d.stroke();
+  ctx2d.beginPath(); ctx2d.moveTo(0,-r*.9);       ctx2d.quadraticCurveTo(r*.05,-r*1.15,r*.1,-r*1.05); ctx2d.stroke();
+  ctx2d.beginPath(); ctx2d.moveTo(r*.2,-r*.86);   ctx2d.quadraticCurveTo(r*.4,-r*1.08,r*.28,-r*.95); ctx2d.stroke();
+
+  ctx2d.restore();
 }
 
 // ================================================================
@@ -740,7 +975,24 @@ function togglePause(){
   paused?SFX.pause():SFX.resume();
 }
 pauseBtn.addEventListener('click',togglePause);
-document.addEventListener('keydown',e=>{if(e.code==='KeyP'||e.code==='Escape')togglePause();});
+document.addEventListener('keydown',e=>{
+  if(e.code==='KeyP'||e.code==='Escape') togglePause();
+  if(e.code==='KeyM') toggleMute();
+});
+
+// ================================================================
+//  MUTE
+// ================================================================
+const muteBtn = document.getElementById('mute-btn');
+const ICON_SOUND = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>`;
+const ICON_MUTE  = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`;
+
+function toggleMute(){
+  const m = SFX.toggleMute();
+  muteBtn.innerHTML = m ? ICON_MUTE : ICON_SOUND;
+  muteBtn.style.color = m ? 'rgba(0,220,255,0.3)' : 'rgba(0,220,255,0.9)';
+}
+muteBtn.addEventListener('click', toggleMute);
 
 // ================================================================
 //  INPUT
