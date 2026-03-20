@@ -405,9 +405,26 @@ class Game {
   }
 
   rndColor(){
-    // 3 colors at start, +1 every 10 levels, capped at palette length
+    // Used only for filling the grid — full unlocked palette
     const maxC = Math.min(3 + Math.floor(this.level / 10), PAL.length);
     return Math.floor(Math.random() * maxC);
+  }
+
+  // Returns a Set of color indices currently present on the grid
+  gridColors(){
+    const s = new Set();
+    for(let r=0;r<TOTAL_ROWS;r++)
+      for(let c=0;c<gcols(r);c++)
+        if(this.grid[r]&&this.grid[r][c]!=null) s.add(this.grid[r][c]);
+    return s;
+  }
+
+  // Pick a random color from those currently on the grid.
+  // Falls back to rndColor() if grid is empty (level transition, etc.)
+  liveColor(){
+    const live = [...this.gridColors()];
+    if(live.length===0) return this.rndColor();
+    return live[Math.floor(Math.random()*live.length)];
   }
 
   // First row index whose Y is at or below the game-over line
@@ -441,6 +458,8 @@ class Game {
         this.grid[r][c]=this.rndColor();
       }
     this.resetTimer();
+    this.shootColor = this.rndColor();
+    this.nextColor  = this.rndColor();
   }
 
   resetTimer(){
@@ -611,7 +630,6 @@ class Game {
     // Level complete when every bubble has been cleared
     if(this.isGridClear()){
       this.combo=0;
-      // Time bonus: remaining seconds × 5 pts
       const bonusPts = Math.floor((this.dropMs/1000)) * 5;
       this.score += bonusPts;
       this.level++;
