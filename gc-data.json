@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1774018857320,
+  "updatedAt": 1774018877829,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -373,6 +373,12 @@
         "date": 1773771240587
       },
       {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 6,
+        "date": 1774018877316
+      },
+      {
         "email": "thehathawayluke@gmail.com",
         "displayName": "thehathawayluke",
         "score": 5,
@@ -653,12 +659,6 @@
         "displayName": "hathawaynoaha",
         "score": 0,
         "date": 1773771357241
-      },
-      {
-        "email": "hathawaynoaha@gmail.com",
-        "displayName": "hathawaynoaha",
-        "score": 0,
-        "date": 1773771367863
       }
     ],
     "custom-xeno-defense-mmtib6np": [
