@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1774008629219,
+  "updatedAt": 1774008637883,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -1722,16 +1722,6 @@
     }
   ],
   "feedback": [
-    {
-      "id": "mmuycfw1lipe",
-      "gameId": "custom-cat-blast-mms566hr",
-      "gameName": "Cat Blast",
-      "type": "bug",
-      "message": "Some times the game ends when I can make other moves :(",
-      "displayName": "hathawaynoaha",
-      "email": "hathawaynoaha@gmail.com",
-      "date": 1773772494193
-    },
     {
       "id": "mmuybeab6kv8",
       "gameId": "custom-pickle-crosser-mmsjpjui",
