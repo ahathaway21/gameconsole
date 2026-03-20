@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1774044569346,
+  "updatedAt": 1774044596506,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -845,6 +845,12 @@
         "displayName": "hathawaynoaha",
         "score": 0,
         "date": 1774044321145
+      },
+      {
+        "email": "hathawaynoaha@gmail.com",
+        "displayName": "hathawaynoaha",
+        "score": 0,
+        "date": 1774044596450
       }
     ],
     "custom-pickle-crossing-mmsia7i3": [
