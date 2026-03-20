@@ -240,9 +240,11 @@ function rrect(x,y,w,h,r){
   ctx2d.closePath();
 }
 
-// Timer duration scales with level bracket (every 5 levels adds 1 minute)
-// Levels 1-5 → 60s, 6-10 → 120s, 11-15 → 180s, …
-function dropMsForLevel(lvl) { return Math.ceil(lvl / 5) * 60 * 1000; }
+// Timer constants
+const BASE_DROP_MS  = 60000;  // 60s starting interval
+const DROP_DECAY_MS = 10000;  // -10s each row drop
+const MIN_DROP_MS   = 30000;  // floor: 30s
+const WARN_MS       = 15000;  // warning beep threshold
 
 // Palette: [fill, glow]
 const PAL = [
@@ -392,24 +394,47 @@ class Game {
     this.transitionMs=0;
     this.levelClearBonus=0;
 
-    // Drop timer (milliseconds) — reset properly via resetTimer()
-    this.dropMs   = 0;
-    this.dropFull = 0;
-    this.warnDone = false;
+    // Drop timer
+    this.dropMs       = 0;
+    this.dropFull     = 0;
+    this.dropInterval = 0;  // current per-drop duration, shrinks 10s each trigger
+    this.warnDone     = false;
 
     this.initLevel();   // also calls resetTimer()
     this.updateHUD();
   }
 
   rndColor(){
-    return Math.floor(Math.random() * Math.min(3+Math.floor((this.level-1)/2), PAL.length));
+    // 3 colors at start, +1 every 10 levels, capped at palette length
+    const maxC = Math.min(3 + Math.floor(this.level / 10), PAL.length);
+    return Math.floor(Math.random() * maxC);
+  }
+
+  // First row index whose Y is at or below the game-over line
+  getDangerRow(){
+    for(let r=0;r<TOTAL_ROWS;r++) if(by(r)>=H-R*4.5) return r;
+    return TOTAL_ROWS;
+  }
+
+  // Starting drop interval for this level (ms)
+  computeStartMs(){
+    const maxSafe = Math.max(1, this.getDangerRow()-2);
+    const target  = 3 + Math.floor(this.level/10);
+    const atMax   = target >= maxSafe;
+    if(!atMax) return BASE_DROP_MS;
+    // At max fill: reduce 15s per 5 levels, floor 30s
+    const cut = Math.floor(this.level/5) * 15000;
+    return Math.max(MIN_DROP_MS, BASE_DROP_MS - cut);
   }
 
   initLevel(){
     this.combo=0;
     this.grid=[];
     for(let r=0;r<TOTAL_ROWS;r++) this.grid.push(new Array(gcols(r)).fill(null));
-    const fillRows=Math.min(3+this.level, Math.floor(TOTAL_ROWS*.55));
+    // Fill rows: 3 base + 1 per 10 levels, never within 2 of danger line
+    const maxSafe  = Math.max(1, this.getDangerRow()-2);
+    const target   = 3 + Math.floor(this.level/10);
+    const fillRows = Math.min(target, maxSafe);
     for(let r=0;r<fillRows;r++)
       for(let c=0;c<gcols(r);c++){
         if(r>0&&Math.random()<.12) continue;
@@ -419,10 +444,10 @@ class Game {
   }
 
   resetTimer(){
-    const ms = dropMsForLevel(this.level);
-    this.dropMs   = ms;
-    this.dropFull = ms;
-    this.warnDone = false;
+    this.dropInterval = this.computeStartMs();
+    this.dropMs       = this.dropInterval;
+    this.dropFull     = this.dropInterval;
+    this.warnDone     = false;
     this.updateTimerUI(1);
   }
 
@@ -439,7 +464,7 @@ class Game {
     this.dropMs -= dt;
     const frac = Math.max(0, this.dropMs/this.dropFull);
     this.updateTimerUI(frac);
-    if(this.dropMs<=15000 && !this.warnDone){ this.warnDone=true; SFX.warn(); }
+    if(this.dropMs<=WARN_MS && !this.warnDone){ this.warnDone=true; SFX.warn(); }
     if(this.dropMs<=0){ this.warnDone=false; this.addRow(); }
   }
 
@@ -474,9 +499,11 @@ class Game {
     }
     this.dropAnim=new RowDropAnim(newRow);
     this.flashes.push(new Flash('INCOMING!','#ff6600'));
-    // Reset the countdown and immediately show full bar
-    const ms=dropMsForLevel(this.level);
-    this.dropMs=ms; this.dropFull=ms; this.warnDone=false;
+    // Decay the interval by 10s each drop, floor at 30s; reset countdown to new value
+    this.dropInterval = Math.max(MIN_DROP_MS, this.dropInterval - DROP_DECAY_MS);
+    this.dropMs   = this.dropInterval;
+    this.dropFull = this.dropInterval;
+    this.warnDone = false;
     this.updateTimerUI(1);
     this.checkGameOver();
     this.updateHUD();
@@ -644,8 +671,8 @@ class Game {
     for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
       if(this.grid[r]&&this.grid[r][c]!=null) rem++;
     document.getElementById('left-val').textContent=rem||'—';
-    const mins=Math.ceil(this.level/5);
-    document.getElementById('timer-label').textContent=`⚠ DROP/${mins}m`;
+    const intSec = Math.round(this.dropInterval/1000);
+    document.getElementById('timer-label').textContent=`⚠ DROP/${intSec}s`;
   }
 
   // ---------- Main update -----------------------------------------
