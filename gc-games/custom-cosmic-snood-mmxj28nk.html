@@ -458,8 +458,8 @@ class Game {
         this.grid[r][c]=this.rndColor();
       }
     this.resetTimer();
-    this.shootColor = this.rndColor();
-    this.nextColor  = this.rndColor();
+    this.shootColor = this.liveColor();
+    this.nextColor  = this.liveColor();
   }
 
   resetTimer(){
@@ -541,7 +541,7 @@ class Game {
     SFX.shoot();
     const sp=R*1.1;
     this.proj={x:W/2,y:H-R*2.2,vx:Math.cos(this.angle)*sp,vy:Math.sin(this.angle)*sp,ci:this.shootColor,trail:[]};
-    this.shootColor=this.nextColor; this.nextColor=this.rndColor(); this.shooting=true;
+    this.shootColor=this.nextColor; this.nextColor=this.liveColor(); this.shooting=true;
   }
 
   updateProj(){
