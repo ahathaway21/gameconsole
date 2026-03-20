@@ -246,15 +246,28 @@ const DROP_DECAY_MS = 10000;  // -10s each row drop
 const MIN_DROP_MS   = 30000;  // floor: 30s
 const WARN_MS       = 15000;  // warning beep threshold
 
-// Palette: [fill, glow]
+// Palette: [fill, glow]  — index unlocks at level (idx-2)*10
 const PAL = [
-  ['#ff3b44','#ff0011'],
-  ['#2d8bff','#0044ff'],
-  ['#00dc6a','#00aa44'],
-  ['#ffdd00','#ffaa00'],
-  ['#cb55ff','#9900ff'],
-  ['#ff8c1a','#ff5500'],
+  ['#ff3b44','#ff0011'], // 0  red     — start
+  ['#2d8bff','#0044ff'], // 1  blue    — start
+  ['#00dc6a','#00aa44'], // 2  green   — start
+  ['#ffdd00','#ffaa00'], // 3  yellow  — L10
+  ['#cb55ff','#9900ff'], // 4  purple  — L20
+  ['#ff8c1a','#ff5500'], // 5  orange  — L30
+  ['#00ddcc','#009988'], // 6  teal    — L40
+  ['#ff44bb','#cc0077'], // 7  magenta — L50
+  ['#aaff00','#77cc00'], // 8  lime    — L60
+  ['#5533ff','#3300cc'], // 9  indigo  — L70
+  ['#cc7733','#994422'], // 10 brown   — L80
+  ['#ddddff','#9999cc'], // 11 silver  — L90
+  ['#ff8888','#cc3333'], // 12 coral   — L100
 ];
+
+// Special character type IDs (stored in grid, never < 100 to avoid color collision)
+const SP_BOMB    = 100; // vibrates@20s → explodes@30s adding 6 bubbles
+const SP_SHUFFLE = 101; // pulses@20s  → shuffles all colors@30s
+const SP_SWAP    = 102; // swaps position with adjacent bubble every 5s
+const SP_PHANTOM = 103; // drifts to adjacent empty cell every 10s, solidifies@40s
 
 let W, H, R, TOTAL_ROWS;
 let game    = null;
@@ -305,7 +318,8 @@ function drawStars() {
 
 // ---- Draw bubble --------------------------------------------------
 function drawBubble(x, y, ci, alpha=1, scale=1) {
-  if (alpha <= 0) return;
+  if(alpha<=0) return;
+  if(ci>=100){ drawSpecial(x,y,ci,0,alpha,scale); return; } // special — no ageMs when called generically
   const [fill, glow] = PAL[ci];
   ctx2d.save();
   ctx2d.globalAlpha = alpha;
@@ -326,6 +340,126 @@ function drawBubble(x, y, ci, alpha=1, scale=1) {
   ctx2d.beginPath(); ctx2d.arc( ex+R*.04,ey-R*.04,R*.05,0,Math.PI*2); ctx2d.fill();
   ctx2d.strokeStyle='rgba(0,0,0,0.55)'; ctx2d.lineWidth=Math.max(1.2,R*.08);
   ctx2d.beginPath(); ctx2d.arc(0,R*.18,R*.25,.18,Math.PI-.18); ctx2d.stroke();
+  ctx2d.restore();
+}
+
+// ---- Draw special character ---------------------------------------
+function drawSpecial(x, y, type, ageMs, alpha=1, scale=1) {
+  if(alpha<=0) return;
+  const now = Date.now();
+  ctx2d.save();
+  ctx2d.globalAlpha = alpha;
+  ctx2d.translate(x, y);
+  ctx2d.scale(scale, scale);
+
+  if(type === SP_BOMB){
+    // Shake after 20s
+    if(ageMs > 20000){
+      const t=(ageMs-20000)/10000, i=Math.min(t,1);
+      ctx2d.translate(Math.sin(now*.03)*R*.18*i, Math.cos(now*.041)*R*.12*i);
+    }
+    // Dark sphere
+    const gr=ctx2d.createRadialGradient(-R*.2,-R*.25,R*.05,0,0,R*.92);
+    gr.addColorStop(0,'#555'); gr.addColorStop(.5,'#181818'); gr.addColorStop(1,'#000');
+    const glow = ageMs>20000 ? .6+.4*Math.sin(now*.018) : .25;
+    ctx2d.shadowColor=`rgba(255,80,0,${glow})`; ctx2d.shadowBlur=R*(ageMs>20000?1.4:.5);
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.88,0,Math.PI*2); ctx2d.fillStyle=gr; ctx2d.fill();
+    ctx2d.shadowBlur=0;
+    // Hazard stripes (clipped)
+    ctx2d.save(); ctx2d.beginPath(); ctx2d.arc(0,0,R*.88,0,Math.PI*2); ctx2d.clip();
+    ctx2d.strokeStyle='rgba(255,110,0,.3)'; ctx2d.lineWidth=R*.22;
+    for(let i=-3;i<=3;i++){ ctx2d.beginPath(); ctx2d.moveTo(i*R*.44-R,R); ctx2d.lineTo(i*R*.44+R,-R); ctx2d.stroke(); }
+    ctx2d.restore();
+    // Fuse
+    ctx2d.strokeStyle='#aa7722'; ctx2d.lineWidth=R*.07; ctx2d.lineCap='round';
+    ctx2d.beginPath(); ctx2d.moveTo(0,-R*.88); ctx2d.quadraticCurveTo(R*.25,-R*1.15,R*.1,-R*1.45); ctx2d.stroke();
+    // Spark
+    const sp2=.5+.5*Math.sin(now*.025);
+    ctx2d.shadowColor='#ffcc00'; ctx2d.shadowBlur=R*.5;
+    ctx2d.fillStyle=`rgba(255,200,0,${sp2})`;
+    ctx2d.beginPath(); ctx2d.arc(R*.1,-R*1.45,R*.1,0,Math.PI*2); ctx2d.fill();
+    ctx2d.shadowBlur=0;
+    // Eyes
+    ctx2d.fillStyle='rgba(255,80,0,.85)';
+    ctx2d.beginPath(); ctx2d.arc(-R*.22,-.04*R,R*.11,0,Math.PI*2); ctx2d.fill();
+    ctx2d.beginPath(); ctx2d.arc( R*.22,-.04*R,R*.11,0,Math.PI*2); ctx2d.fill();
+    // Mouth
+    ctx2d.strokeStyle='rgba(255,80,0,.7)'; ctx2d.lineWidth=R*.06;
+    ctx2d.beginPath(); ctx2d.arc(0,R*.28,R*.18,.2,Math.PI-.2); ctx2d.stroke();
+    // Countdown ring
+    const frac=Math.max(0,1-ageMs/30000);
+    ctx2d.strokeStyle=`rgba(255,100,0,.65)`; ctx2d.lineWidth=R*.1;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.78,-Math.PI/2,-Math.PI/2+frac*Math.PI*2); ctx2d.stroke();
+
+  } else if(type === SP_SHUFFLE){
+    const ps = ageMs>20000 ? 1+.12*Math.sin(now*.01) : 1;
+    ctx2d.scale(ps,ps);
+    const gr=ctx2d.createRadialGradient(-R*.2,-R*.25,R*.05,0,0,R*.92);
+    gr.addColorStop(0,'#99aaff'); gr.addColorStop(.5,'#220066'); gr.addColorStop(1,'#110033');
+    const glow2=ageMs>20000 ? .5+.5*Math.sin(now*.01) : .35;
+    ctx2d.shadowColor=`rgba(160,60,255,${glow2})`; ctx2d.shadowBlur=R*.9;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.88,0,Math.PI*2); ctx2d.fillStyle=gr; ctx2d.fill();
+    ctx2d.shadowBlur=0;
+    // Rotating spiral arms
+    const sa=now*.003;
+    ctx2d.strokeStyle='rgba(190,110,255,.85)'; ctx2d.lineWidth=R*.1; ctx2d.lineCap='round';
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.44,sa,sa+Math.PI*1.5); ctx2d.stroke();
+    ctx2d.save(); ctx2d.translate(Math.cos(sa+Math.PI*1.5)*R*.44,Math.sin(sa+Math.PI*1.5)*R*.44);
+    ctx2d.rotate(sa+Math.PI/2+Math.PI*1.5);
+    ctx2d.fillStyle='rgba(190,110,255,.85)';
+    ctx2d.beginPath(); ctx2d.moveTo(0,-R*.12); ctx2d.lineTo(R*.09,R*.09); ctx2d.lineTo(-R*.09,R*.09); ctx2d.closePath(); ctx2d.fill();
+    ctx2d.restore();
+    const sa2=-now*.002;
+    ctx2d.strokeStyle='rgba(130,60,200,.55)'; ctx2d.lineWidth=R*.07;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.25,sa2,sa2+Math.PI*1.3); ctx2d.stroke();
+    // Countdown ring
+    const frac2=Math.max(0,1-ageMs/30000);
+    ctx2d.strokeStyle='rgba(160,80,255,.65)'; ctx2d.lineWidth=R*.1;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.78,-Math.PI/2,-Math.PI/2+frac2*Math.PI*2); ctx2d.stroke();
+
+  } else if(type === SP_SWAP){
+    const gr=ctx2d.createRadialGradient(-R*.2,-R*.25,R*.05,0,0,R*.92);
+    gr.addColorStop(0,'#88ffee'); gr.addColorStop(.5,'#006655'); gr.addColorStop(1,'#003322');
+    ctx2d.shadowColor='rgba(0,210,160,.5)'; ctx2d.shadowBlur=R*.7;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.88,0,Math.PI*2); ctx2d.fillStyle=gr; ctx2d.fill();
+    ctx2d.shadowBlur=0;
+    // Double arrow ↔
+    ctx2d.strokeStyle='rgba(0,255,180,.85)'; ctx2d.lineWidth=R*.1; ctx2d.lineCap='round';
+    ctx2d.beginPath(); ctx2d.moveTo(-R*.35,0); ctx2d.lineTo(R*.35,0); ctx2d.stroke();
+    ctx2d.fillStyle='rgba(0,255,180,.85)';
+    ctx2d.beginPath(); ctx2d.moveTo(-R*.36,0); ctx2d.lineTo(-R*.2,-R*.14); ctx2d.lineTo(-R*.2,R*.14); ctx2d.closePath(); ctx2d.fill();
+    ctx2d.beginPath(); ctx2d.moveTo( R*.36,0); ctx2d.lineTo( R*.2,-R*.14); ctx2d.lineTo( R*.2,R*.14); ctx2d.closePath(); ctx2d.fill();
+    // Orbiting dots (swap countdown)
+    const da=now*.004;
+    ctx2d.fillStyle='rgba(0,255,200,.55)';
+    ctx2d.beginPath(); ctx2d.arc(Math.cos(da)*R*.55,Math.sin(da)*R*.55,R*.07,0,Math.PI*2); ctx2d.fill();
+    ctx2d.beginPath(); ctx2d.arc(-Math.cos(da)*R*.55,-Math.sin(da)*R*.55,R*.07,0,Math.PI*2); ctx2d.fill();
+
+  } else if(type === SP_PHANTOM){
+    // Flicker near solidification
+    const flicker = ageMs>35000 ? .3+.7*Math.abs(Math.sin(now*.012)) : 1;
+    ctx2d.globalAlpha = alpha * flicker * .88;
+    const gr=ctx2d.createRadialGradient(-R*.2,-R*.25,R*.05,0,0,R*.92);
+    gr.addColorStop(0,'#dddaff'); gr.addColorStop(.4,'#5533aa'); gr.addColorStop(1,'#221133');
+    ctx2d.shadowColor='rgba(160,100,255,.65)'; ctx2d.shadowBlur=R*1.1;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.88,0,Math.PI*2); ctx2d.fillStyle=gr; ctx2d.fill();
+    ctx2d.shadowBlur=0;
+    // Single large glowing eye
+    ctx2d.globalAlpha = alpha * flicker * (.7+.3*Math.sin(now*.005));
+    ctx2d.fillStyle='#ffffff'; ctx2d.shadowColor='#bbaaff'; ctx2d.shadowBlur=R*.5;
+    ctx2d.beginPath(); ctx2d.ellipse(0,R*.04,R*.2,R*.28,0,0,Math.PI*2); ctx2d.fill();
+    ctx2d.shadowBlur=0;
+    ctx2d.fillStyle='#220044';
+    ctx2d.beginPath(); ctx2d.ellipse(0,R*.04,R*.1,R*.15,0,0,Math.PI*2); ctx2d.fill();
+    ctx2d.fillStyle='white';
+    ctx2d.beginPath(); ctx2d.arc(-R*.06,R*.0,R*.04,0,Math.PI*2); ctx2d.fill();
+    ctx2d.globalAlpha = alpha * flicker * .55;
+    // Move cooldown ring (10s cycle)
+    const moveFrac = 1 - ((ageMs%10000)/10000);
+    ctx2d.strokeStyle='rgba(170,100,255,.65)'; ctx2d.lineWidth=R*.09;
+    ctx2d.beginPath(); ctx2d.arc(0,0,R*.78,-Math.PI/2,-Math.PI/2+moveFrac*Math.PI*2); ctx2d.stroke();
+  }
+
   ctx2d.restore();
 }
 
@@ -393,6 +527,7 @@ class Game {
     this.levelTransition=false;
     this.transitionMs=0;
     this.levelClearBonus=0;
+    this.specials = new Map(); // "r,c" → {type, ageMs, swapCd, moveCd, triggered}
 
     // Drop timer
     this.dropMs       = 0;
@@ -415,7 +550,7 @@ class Game {
     const s = new Set();
     for(let r=0;r<TOTAL_ROWS;r++)
       for(let c=0;c<gcols(r);c++)
-        if(this.grid[r]&&this.grid[r][c]!=null) s.add(this.grid[r][c]);
+        if(this.grid[r]&&this.grid[r][c]!=null&&this.grid[r][c]<100) s.add(this.grid[r][c]);
     return s;
   }
 
@@ -446,9 +581,9 @@ class Game {
 
   initLevel(){
     this.combo=0;
+    this.specials = new Map();
     this.grid=[];
     for(let r=0;r<TOTAL_ROWS;r++) this.grid.push(new Array(gcols(r)).fill(null));
-    // Fill rows: 3 base + 1 per 10 levels, never within 2 of danger line
     const maxSafe  = Math.max(1, this.getDangerRow()-2);
     const target   = 3 + Math.floor(this.level/10);
     const fillRows = Math.min(target, maxSafe);
@@ -457,21 +592,19 @@ class Game {
         if(r>0&&Math.random()<.12) continue;
         this.grid[r][c]=this.rndColor();
       }
-    // On every 10th level boundary, guarantee the newly unlocked color appears
-    // so liveColor() can return it and the shooter queue picks it up.
+    // Guarantee the newly unlocked color on level milestones
     const maxC = Math.min(3 + Math.floor(this.level/10), PAL.length);
-    const newColor = maxC - 1;
     if(this.level>0 && this.level%10===0 && fillRows>0){
-      // Find a random filled cell and stamp the new color in
       const filled=[];
       for(let r=0;r<fillRows;r++)
         for(let c=0;c<gcols(r);c++)
-          if(this.grid[r][c]!=null) filled.push([r,c]);
+          if(this.grid[r][c]!=null&&this.grid[r][c]<100) filled.push([r,c]);
       if(filled.length){
         const [fr,fc]=filled[Math.floor(Math.random()*filled.length)];
-        this.grid[fr][fc]=newColor;
+        this.grid[fr][fc]=maxC-1;
       }
     }
+    this.spawnSpecial();
     this.resetTimer();
     this.shootColor = this.liveColor();
     this.nextColor  = this.liveColor();
@@ -490,6 +623,131 @@ class Game {
       for(let c=0;c<gcols(r);c++)
         if(this.grid[r]&&this.grid[r][c]!=null) return false;
     return true;
+  }
+
+  // ---- Specials ------------------------------------------------
+  spawnSpecial(){
+    // Only after level 10, ~35% chance per level
+    if(this.level<10 || Math.random()>0.35) return;
+    // Collect eligible cells: row>0, not near danger line, currently filled with normal bubble
+    const danger = H-R*4.5;
+    const cands=[];
+    for(let r=1;r<TOTAL_ROWS;r++){
+      if(by(r)>=danger-R*2) break; // stay away from danger
+      for(let c=0;c<gcols(r);c++)
+        if(this.grid[r]&&this.grid[r][c]!=null&&this.grid[r][c]<100) cands.push([r,c]);
+    }
+    if(!cands.length) return;
+    const [r,c]=cands[Math.floor(Math.random()*cands.length)];
+    const type=[SP_BOMB,SP_SHUFFLE,SP_SWAP,SP_PHANTOM][Math.floor(Math.random()*4)];
+    this.grid[r][c]=type;
+    this.specials.set(`${r},${c}`,{type,ageMs:0,swapCd:0,moveCd:0,triggered:false});
+  }
+
+  updateSpecials(dt){
+    if(this.over||this.levelTransition) return;
+    for(const [key,sp] of [...this.specials]){
+      const [r,c]=key.split(',').map(Number);
+      // Remove if grid no longer holds this special (orphaned/cleared externally)
+      if(!this.grid[r]||this.grid[r][c]!==sp.type){this.specials.delete(key);continue;}
+      sp.ageMs+=dt;
+      if(sp.type===SP_BOMB){
+        if(sp.ageMs>=30000&&!sp.triggered){sp.triggered=true;this.triggerBomb(r,c);}
+      } else if(sp.type===SP_SHUFFLE){
+        if(sp.ageMs>=30000&&!sp.triggered){sp.triggered=true;this.triggerShuffle(r,c);}
+      } else if(sp.type===SP_SWAP){
+        sp.swapCd+=dt;
+        if(sp.swapCd>=5000){sp.swapCd=0;this.triggerSwap(r,c);}
+      } else if(sp.type===SP_PHANTOM){
+        sp.moveCd+=dt;
+        if(sp.moveCd>=10000){sp.moveCd=0;this.triggerPhantomMove(r,c);}
+        if(sp.ageMs>=40000&&!sp.triggered){sp.triggered=true;this.triggerPhantomSolidify(r,c);}
+      }
+    }
+  }
+
+  triggerBomb(r,c){
+    if(!this.specials.has(`${r},${c}`)) return;
+    this.specials.delete(`${r},${c}`);
+    this.grid[r][c]=null;
+    this.shake=14; SFX.rowDrop();
+    this.flashes.push(new Flash('💥 BOOM! +6','#ff6600'));
+    // Collect valid empty positions (not top row, not at/below danger)
+    const danger=H-R*4.5, empty=[];
+    for(let rr=1;rr<TOTAL_ROWS;rr++){
+      if(by(rr)>=danger) break;
+      for(let cc=0;cc<gcols(rr);cc++)
+        if(this.grid[rr]&&this.grid[rr][cc]==null) empty.push([rr,cc]);
+    }
+    // Fisher-Yates shuffle then fill up to 6
+    for(let i=empty.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[empty[i],empty[j]]=[empty[j],empty[i]];}
+    empty.slice(0,6).forEach(([rr,cc])=>{
+      this.grid[rr][cc]=this.rndColor();
+      for(let i=0;i<6;i++) this.particles.push(new Particle(bx(cc,rr),by(rr),'#ff8800'));
+    });
+    this.updateHUD();
+  }
+
+  triggerShuffle(r,c){
+    if(!this.specials.has(`${r},${c}`)) return;
+    this.specials.delete(`${r},${c}`);
+    this.grid[r][c]=null;
+    this.shake=22; SFX.rowDrop();
+    this.flashes.push(new Flash('🌀 SHUFFLED!','#cc55ff'));
+    // Collect all normal bubble positions+colors
+    const pos=[], cols=[];
+    for(let rr=0;rr<TOTAL_ROWS;rr++) for(let cc=0;cc<gcols(rr);cc++)
+      if(this.grid[rr]&&this.grid[rr][cc]!=null&&this.grid[rr][cc]<100){pos.push([rr,cc]);cols.push(this.grid[rr][cc]);}
+    // Shuffle colors
+    for(let i=cols.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[cols[i],cols[j]]=[cols[j],cols[i]];}
+    pos.forEach(([rr,cc],i)=>{this.grid[rr][cc]=cols[i];});
+    this.updateHUD();
+  }
+
+  triggerSwap(r,c){
+    const sp=this.specials.get(`${r},${c}`); if(!sp) return;
+    // Find adjacent normal bubbles
+    const adj=neighbors(r,c,TOTAL_ROWS).filter(([nr,nc])=>this.grid[nr]&&this.grid[nr][nc]!=null&&this.grid[nr][nc]<100);
+    if(!adj.length) return;
+    const [nr,nc]=adj[Math.floor(Math.random()*adj.length)];
+    const otherColor=this.grid[nr][nc];
+    // Move swapper to bubble's slot, bubble to swapper's old slot
+    this.grid[r][c]=otherColor;
+    this.grid[nr][nc]=SP_SWAP;
+    this.specials.delete(`${r},${c}`);
+    this.specials.set(`${nr},${nc}`,sp);
+    for(let i=0;i<4;i++) this.particles.push(new Particle(bx(c,r),by(r),'#00ffcc'));
+    // Check if displaced bubble creates a match
+    const matched=this.flood(r,c,otherColor);
+    if(matched.length>=3) this.pop(matched,otherColor);
+  }
+
+  triggerPhantomMove(r,c){
+    const sp=this.specials.get(`${r},${c}`); if(!sp) return;
+    const danger=H-R*4.5;
+    const empties=neighbors(r,c,TOTAL_ROWS).filter(([nr,nc])=>
+      nr>0&&this.grid[nr]&&this.grid[nr][nc]==null&&by(nr)<danger
+    );
+    if(!empties.length) return;
+    const [nr,nc]=empties[Math.floor(Math.random()*empties.length)];
+    this.grid[r][c]=null;
+    this.grid[nr][nc]=SP_PHANTOM;
+    this.specials.delete(`${r},${c}`);
+    this.specials.set(`${nr},${nc}`,sp);
+    for(let i=0;i<3;i++) this.particles.push(new Particle(bx(c,r),by(r),'#aa88ff'));
+  }
+
+  triggerPhantomSolidify(r,c){
+    const sp=this.specials.get(`${r},${c}`); if(!sp) return;
+    const newColor=this.rndColor();
+    this.grid[r][c]=newColor;
+    this.specials.delete(`${r},${c}`);
+    this.flashes.push(new Flash('PHANTOM SOLIDIFIED!','#aaaaff'));
+    for(let i=0;i<8;i++) this.particles.push(new Particle(bx(c,r),by(r),PAL[newColor][1]));
+    // May create a match at the solidified position
+    const matched=this.flood(r,c,newColor);
+    if(matched.length>=3) this.pop(matched,newColor);
+    else this.checkGameOver();
   }
 
   // ---------- Timer -----------------------------------------------
@@ -525,6 +783,15 @@ class Game {
     const newRow=Array.from({length:gcols(0)},()=>this.rndColor());
     this.grid.pop();
     this.grid.unshift(newRow);
+    // After unshift every row shifts down by 1 — remap specials keys
+    const shiftedSpecials = new Map();
+    for(const [key,sp] of this.specials){
+      const [sr,sc]=key.split(',').map(Number);
+      const newR=sr+1;
+      if(newR<TOTAL_ROWS){ shiftedSpecials.set(`${newR},${sc}`,sp); }
+      // if shifted past bottom, just drop the special
+    }
+    this.specials=shiftedSpecials;
     // After unshift every row's parity flips. Pad any row that is now too
     // short so grid[r][c] is always null (never undefined) for c < gcols(r).
     for(let r=0;r<this.grid.length;r++){
@@ -639,6 +906,7 @@ class Game {
       orp.forEach(([r,c])=>{
         this.fallers.push(new Faller(bx(c,r),by(r),this.grid[r][c]));
         this.grid[r][c]=null; this.score+=5*this.combo;
+        this.specials.delete(`${r},${c}`);
       });
       if(orp.length>=4) this.flashes.push(new Flash(`+${orp.length} FALLING!`,'#ff88ff'));
     }
@@ -724,6 +992,7 @@ class Game {
     }
     this.updateProj();
     this.tickTimer(dt);
+    this.updateSpecials(dt);
     this.particles=this.particles.filter(p=>{p.update();return p.life>0;});
     this.fallers  =this.fallers.filter  (f=>{f.update();return f.life>0;});
     this.flashes  =this.flashes.filter  (f=>{f.update();return f.life>0;});
@@ -768,8 +1037,16 @@ class Game {
     ctx2d.beginPath(); ctx2d.moveTo(0,shooterY); ctx2d.lineTo(W,shooterY); ctx2d.stroke();
     ctx2d.setLineDash([]); ctx2d.restore();
     // Grid
-    for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++)
-      if(this.grid[r]&&this.grid[r][c]!=null) drawBubble(bx(c,r),by(r),this.grid[r][c]);
+    for(let r=0;r<TOTAL_ROWS;r++) for(let c=0;c<gcols(r);c++){
+      if(!this.grid[r]||this.grid[r][c]==null) continue;
+      const ci=this.grid[r][c];
+      if(ci>=100){
+        const sp=this.specials.get(`${r},${c}`);
+        drawSpecial(bx(c,r),by(r),ci,sp?sp.ageMs:0);
+      } else {
+        drawBubble(bx(c,r),by(r),ci);
+      }
+    }
     // Drop anim
     if(this.dropAnim) this.dropAnim.draw();
     // Aim + launcher — hidden during level transition
