@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1774008637883,
+  "updatedAt": 1774010111943,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -1653,6 +1653,14 @@
         "displayName": "thehathawayluke",
         "score": 1,
         "date": 1773624674791
+      }
+    ],
+    "custom-cosmic-snood-mmxj28nk": [
+      {
+        "email": "ahathaway21@gmail.com",
+        "displayName": "ahathaway21",
+        "score": 15300,
+        "date": 1774010111626
       }
     ]
   },
