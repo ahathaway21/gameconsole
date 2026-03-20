@@ -457,6 +457,21 @@ class Game {
         if(r>0&&Math.random()<.12) continue;
         this.grid[r][c]=this.rndColor();
       }
+    // On every 10th level boundary, guarantee the newly unlocked color appears
+    // so liveColor() can return it and the shooter queue picks it up.
+    const maxC = Math.min(3 + Math.floor(this.level/10), PAL.length);
+    const newColor = maxC - 1;
+    if(this.level>0 && this.level%10===0 && fillRows>0){
+      // Find a random filled cell and stamp the new color in
+      const filled=[];
+      for(let r=0;r<fillRows;r++)
+        for(let c=0;c<gcols(r);c++)
+          if(this.grid[r][c]!=null) filled.push([r,c]);
+      if(filled.length){
+        const [fr,fc]=filled[Math.floor(Math.random()*filled.length)];
+        this.grid[fr][fc]=newColor;
+      }
+    }
     this.resetTimer();
     this.shootColor = this.liveColor();
     this.nextColor  = this.liveColor();
