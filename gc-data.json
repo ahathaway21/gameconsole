@@ -1,6 +1,6 @@
 {
   "version": 4,
-  "updatedAt": 1781802557412,
+  "updatedAt": 1781802981470,
   "users": [
     {
       "email": "ahathaway21@gmail.com",
@@ -137,6 +137,12 @@
         "displayName": "ahathaway21",
         "score": 30560,
         "date": 1777044568794
+      },
+      {
+        "email": "ahathaway21@gmail.com",
+        "displayName": "ahathaway21",
+        "score": 30460,
+        "date": 1781802981113
       },
       {
         "email": "ahathaway21@gmail.com",
@@ -653,12 +659,6 @@
         "displayName": "ahathaway21",
         "score": 19070,
         "date": 1781184821902
-      },
-      {
-        "email": "ahathaway21@gmail.com",
-        "displayName": "ahathaway21",
-        "score": 19010,
-        "date": 1776426204294
       }
     ],
     "custom-pickle-crosser-mmsjpjui": [
