@@ -273,6 +273,7 @@
     <div class="row">
       <button class="sm" id="disconnectBtn" hidden>Disconnect</button>
       <button class="sm" id="wakeBtn">Keep screen on</button>
+      <button class="sm" id="bgBtn" hidden>Allow background running</button>
       <button class="sm" id="syncBtn" disabled>Sync now</button>
       <button class="sm" id="findBtn" disabled>Find my watch</button>
     </div>
@@ -315,6 +316,11 @@
   const CMD = { MSG: 65, FIND: 97, BP: 105, SPO2: 107, HR: 109, TIME: 49, PAST: 51, HRHIST: 53, USER: 18, GOAL: 22, HRAUTO: 31, SEDENTARY: 29, MOVE: 115, ADV: 0xb9 };
 
   const $ = id => document.getElementById(id);
+  // Inside the Android app, window.HDNative is the native bridge (background Bluetooth service).
+  const NATIVE = window.HDNative || null;
+  let nativeConnected = false;
+  const isConnected = () => NATIVE ? nativeConnected : !!device?.gatt.connected;
+  const hasCmd = () => NATIVE ? nativeConnected : !!chars.out;
   const now = () => Date.now();
   const MIN = 60000;
   const store = {
@@ -374,10 +380,11 @@
       hrEvery: +$('pHrEvery').value, spo2Every: +$('pSpo2Every').value,
       watch: $('pWatch').checked, phone: $('pPhone').checked, inactive: $('pInactive').checked };
     store.set('hd.profile', profile);
+    pushProfile();
     if (profile.weight && !weights.length) addWeight(profile.weight, todayStr(), true);
     if (profile.phone) askNotifyPermission();
     renderDerived(); renderAll();
-    if (device?.gatt.connected) syncWatch();
+    if (isConnected()) syncWatch();
     log('Profile saved.');
   };
 
@@ -516,16 +523,19 @@
   }
   let swReg = null;
   async function initSW() {
+    if (NATIVE) return;
     if (!('serviceWorker' in navigator)) return;
     try { swReg = await navigator.serviceWorker.register('health-sw.js'); } catch (e) { log('Service worker failed: ' + e.message); }
   }
   async function askNotifyPermission() {
+    if (NATIVE) return true;
     if (!('Notification' in window)) return false;
     if (Notification.permission === 'granted') return true;
     if (Notification.permission === 'denied') return false;
     try { return (await Notification.requestPermission()) === 'granted'; } catch { return false; }
   }
   async function phoneNotify(title, body) {
+    if (NATIVE) { NATIVE.notify(title, body); return; }
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     try {
       const reg = swReg || await navigator.serviceWorker?.ready;
@@ -548,7 +558,7 @@
     for (const id of ['bpBtn', 'syncBtn', 'findBtn']) $(id).disabled = !on;
   }
 
-  if (!navigator.bluetooth) {
+  if (!navigator.bluetooth && !NATIVE) {
     $('support').textContent = 'Bluetooth isn\'t available in this browser. Open this page in Chrome on Android with Bluetooth and Location on.';
     $('connectBtn').disabled = true;
   }
@@ -609,11 +619,11 @@
       if (!device.gatt.connected) connect(device);
     }
   }
-  $('connectBtn').onclick = () => { reconnectTries = 0; connect(); };
-  $('disconnectBtn').onclick = () => { userDisconnect = true; if (device?.gatt.connected) device.gatt.disconnect(); };
+  $('connectBtn').onclick = () => { if (NATIVE) { NATIVE.pickDevice(); return; } reconnectTries = 0; connect(); };
+  $('disconnectBtn').onclick = () => { if (NATIVE) { NATIVE.forget(); return; } userDisconnect = true; if (device?.gatt.connected) device.gatt.disconnect(); };
   // Offer to reconnect a previously-approved watch after a page reload (if the browser supports it).
   (async () => {
-    if (!navigator.bluetooth?.getDevices) return;
+    if (NATIVE || !navigator.bluetooth?.getDevices) return;
     try {
       const id = store.get('hd.deviceId', null);
       const devs = await navigator.bluetooth.getDevices();
@@ -643,6 +653,10 @@
 
   // Moyoung packets: FE EA <0x10> <total length> <cmd> <payload...>
   async function moySend(cmd, payload = []) {
+    if (NATIVE) {
+      if (!nativeConnected) { log('Cannot send: watch not connected.'); return false; }
+      NATIVE.send(cmd, JSON.stringify(Array.from(payload))); log(`SEND cmd ${cmd} (app)`); return true;
+    }
     if (!chars.out || !device?.gatt.connected) { log('Cannot send: watch command channel unavailable.'); return false; }
     const len = payload.length + 5;
     const pkt = new Uint8Array(len);
@@ -677,28 +691,28 @@
     fn(rec); store.set(k, rec);
   }
   const u24le = (p, o) => p[o] | (p[o + 1] << 8) | (p[o + 2] << 16);
-  function handleHistory(cmd, payload) {
+  function handleHistory(cmd, payload, ref = now()) {
     if (cmd === CMD.PAST && (payload[0] === 1 || payload[0] === 2) && payload.length >= 10) {
       const daysAgo = payload[0], steps = u24le(payload, 1), meters = u24le(payload, 4), kcal = u24le(payload, 7);
-      withDay(now() - daysAgo * 86400000, r => { if (!r.steps || r.steps.steps < steps) r.steps = { steps, meters, kcal, t: now(), src: 'watch' }; });
+      withDay(ref - daysAgo * 86400000, r => { if (!r.steps || r.steps.steps < steps) r.steps = { steps, meters, kcal, t: now(), src: 'watch' }; });
       log(`History: ${daysAgo} day(s) ago ${steps} steps`);
       renderHistory();
       return true;
     }
     if (cmd === CMD.HRHIST && payload.length >= 2) {
       const idx = payload[0], daysAgo = idx >> 2, startHour = (idx % 4) * 6;
-      const base = new Date(now() - daysAgo * 86400000); base.setHours(0, 0, 0, 0);
+      const base = new Date(ref - daysAgo * 86400000); base.setHours(0, 0, 0, 0);
       let n = 0;
       withDay(base.getTime() + 3600000, r => {
         for (let i = 1; i < payload.length && i <= 72; i++) {
           const hr = payload[i]; if (hr < 30 || hr > 220) continue;
           const m = startHour * 60 + (i - 1) * 5;
-          if (base.getTime() + m * MIN > now()) continue;
+          if (base.getTime() + m * MIN > ref) continue;
           if (!r.hr[m]) { r.hr[m] = [hr, 1, hr, hr]; n++; }
         }
       });
       log(`HR history block ${idx}: ${n} new samples`);
-      if (idx < 7) moySend(CMD.HRHIST, [idx + 1]); else { log('HR history sync finished.'); renderAll(); }
+      if (idx < 7) { if (!NATIVE) moySend(CMD.HRHIST, [idx + 1]); } else { log('HR history sync finished.'); renderAll(); }
       return true;
     }
     if (cmd === CMD.ADV && payload[0] === 0x11) {
@@ -709,12 +723,12 @@
         const vals = [];
         for (let i = 0; i + 3 < payload.length && i < 48; i++) {
           const v = payload[3 + i]; if (!v || v === 255) continue;
-          const t = new Date(now() - daysAgo * 86400000); t.setHours(i >> 1, (i % 2) * 30, 0, 0);
-          if (t.getTime() > now()) continue;
+          const t = new Date(ref - daysAgo * 86400000); t.setHours(i >> 1, (i % 2) * 30, 0, 0);
+          if (t.getTime() > ref) continue;
           vals.push({ t: t.getTime(), v }); last = v;
         }
         if (vals.length) {
-          withDay(now() - daysAgo * 86400000, r => { r.watchStress = vals; });
+          withDay(ref - daysAgo * 86400000, r => { r.watchStress = vals; });
           if (daysAgo === 0 && last) { live.stress = { score: last, basis: 'Measured by the watch.', watch: true }; renderStress(); }
           log(`Watch stress: ${vals.length} readings for ${daysAgo} day(s) ago`);
         }
@@ -726,6 +740,7 @@
 
   // Sync clock, profile and settings to the watch, then pull its stored history.
   async function syncWatch() {
+    if (NATIVE) { pushProfile(); NATIVE.sync(); return; }
     if (!chars.out) return;
     // The watch keeps time as "local wall clock expressed in GMT+8".
     const wall = now() - new Date().getTimezoneOffset() * MIN;
@@ -749,13 +764,13 @@
   }
   $('syncBtn').onclick = syncWatch;
   $('findBtn').onclick = () => moySend(CMD.FIND, []);
-  $('wAutoHR').onchange = () => { profile.autoHR = $('wAutoHR').checked; store.set('hd.profile', profile); moySend(CMD.HRAUTO, [profile.autoHR ? 2 : 0]); };
-  $('wSedentary').onchange = async () => { profile.sedentary = $('wSedentary').checked; store.set('hd.profile', profile); await moySend(CMD.SEDENTARY, [profile.sedentary ? 1 : 0]); if (profile.sedentary) moySend(CMD.MOVE, [60, 50, 8, 21]); };
+  $('wAutoHR').onchange = () => { profile.autoHR = $('wAutoHR').checked; store.set('hd.profile', profile); pushProfile(); moySend(CMD.HRAUTO, [profile.autoHR ? 2 : 0]); };
+  $('wSedentary').onchange = async () => { profile.sedentary = $('wSedentary').checked; store.set('hd.profile', profile); pushProfile(); await moySend(CMD.SEDENTARY, [profile.sedentary ? 1 : 0]); if (profile.sedentary) moySend(CMD.MOVE, [60, 50, 8, 21]); };
 
   function handlePacket(cmd, payload) {
     if (handleHistory(cmd, payload)) return;
     if (cmd === CMD.BP && payload.length >= 3 && payload[1] !== 255 && payload[1] > 60 && payload[2] > 30) onBP(payload[1], payload[2], 'watch');
-    if (cmd === CMD.HR && payload[0] > 25 && payload[0] < 240) onHeartRate(payload[0]);
+    if (cmd === CMD.HR && !NATIVE && payload[0] > 25 && payload[0] < 240) onHeartRate(payload[0]);
     if (cmd === CMD.SPO2 && payload[0] >= 70 && payload[0] <= 100) log(`Watch reported SpO2 ${payload[0]}%`);
     for (let i = moyWaiters.length - 1; i >= 0; i--) {
       const w = moyWaiters[i];
@@ -798,7 +813,7 @@
     return Math.round(median(lastHalf.length >= 3 ? lastHalf : pts.map(p => p.bpm)) || 0) || null;
   }
   async function measureSpo2() {
-    if (!chars.out) return null;
+    if (!hasCmd()) return null;
     const pending = waitPacket(CMD.SPO2, p => p[0] >= 70 && p[0] <= 100, 70000);
     await moySend(CMD.SPO2, [0]);
     let done = false; pending.then(() => { done = true; });
@@ -817,7 +832,7 @@
 
   async function runHealthCheck() {
     if (checkState.running) return;
-    checkState.running = true; $('checkBtn').disabled = true;
+    checkState.running = true; $('checkBtn').disabled = true; NATIVE?.setBusy(true);
     const results = [];
     try {
       const resting = isResting();
@@ -829,7 +844,7 @@
       }
       const spo2 = await measureSpo2();
       if (spo2) { recordSpo2(spo2, 'watch'); results.push(assessSpo2(spo2)); }
-      else results.push({ level: 'na', title: 'No blood-oxygen reading', detail: chars.out ? 'The watch didn\'t send a result. Measure SpO2 on the watch itself, then tap "Enter SpO2 from watch".' : 'This watch connection has no command channel. Measure on the watch and tap "Enter SpO2 from watch".' });
+      else results.push({ level: 'na', title: 'No blood-oxygen reading', detail: hasCmd() ? 'The watch didn\'t send a result. Measure SpO2 on the watch itself, then tap "Enter SpO2 from watch".' : 'This watch connection has no command channel. Measure on the watch and tap "Enter SpO2 from watch".' });
       const stress = resting && hr ? estimateStress(hr) : null;
       if (stress) { live.stress = stress; results.push(assessStress(stress)); }
       else results.push({ level: 'na', title: 'Stress not estimated', detail: 'Needs a resting heart-rate reading (no steps for 3 minutes).' });
@@ -845,7 +860,7 @@
       if (stress) raise('stress', assessStress(stress), 120);
       renderAll();
     } finally {
-      checkState.running = false; $('checkBtn').disabled = !device?.gatt.connected;
+      checkState.running = false; NATIVE?.setBusy(false); $('checkBtn').disabled = !isConnected();
     }
   }
   $('checkBtn').onclick = runHealthCheck;
@@ -861,6 +876,7 @@
   // Background rules: run every 30 s.
   let lastAutoHR = now(), lastAutoSpo2 = now();
   setInterval(async () => {
+    if (NATIVE) return; // the app's background service runs checks and alerts
     const d = derived();
     const recent = live.samples.filter(s => s.t > now() - 2 * MIN).map(s => s.bpm);
     if (recent.length >= 10) {
@@ -869,10 +885,10 @@
       else if (!isResting()) raise('activeHR', assessActiveHR(med, d), 10);
     }
     const h = new Date().getHours();
-    if (profile.inactive && device?.gatt.connected && h >= 8 && h < 21 && now() - live.lastStepChange > 60 * MIN) {
+    if (profile.inactive && isConnected() && h >= 8 && h < 21 && now() - live.lastStepChange > 60 * MIN) {
       raise('inactive', { level: 'caution', title: 'Time to move', detail: 'You haven\'t moved for an hour. A 2–5 minute walk breaks up sitting time, which helps blood sugar and circulation.', watch: 'Sitting 1 hr. Take a 3-5 min walk.' }, 60);
     }
-    if (!device?.gatt.connected || checkState.running) return;
+    if (!isConnected() || checkState.running) return;
     if (profile.hrEvery && now() - lastAutoHR > profile.hrEvery * MIN) {
       lastAutoHR = now(); checkState.running = true;
       try {
@@ -885,7 +901,7 @@
           renderAll();
         }
       } finally { checkState.running = false; }
-    } else if (profile.spo2Every && chars.out && now() - lastAutoSpo2 > profile.spo2Every * MIN) {
+    } else if (profile.spo2Every && hasCmd() && now() - lastAutoSpo2 > profile.spo2Every * MIN) {
       lastAutoSpo2 = now(); checkState.running = true;
       try { const v = await measureSpo2(); progress(''); if (v) { recordSpo2(v, 'auto'); raise('spo2', assessSpo2(v)); } }
       finally { checkState.running = false; }
@@ -1061,7 +1077,7 @@
   }
   $('bpBtn').onclick = async () => {
     if (checkState.running) return;
-    checkState.running = true; $('bpBtn').disabled = true;
+    checkState.running = true; $('bpBtn').disabled = true; NATIVE?.setBusy(true);
     try {
       const pending = waitPacket(CMD.BP, p => p.length >= 3 && p[1] !== 255 && p[1] > 60, 70000);
       await moySend(CMD.BP, [0, 0, 0]);
@@ -1070,7 +1086,7 @@
       const res = await pending;
       await moySend(CMD.BP, [255, 255, 255]);
       progress(res ? '' : 'The watch did not return a blood-pressure reading.');
-    } finally { checkState.running = false; $('bpBtn').disabled = !device?.gatt.connected; }
+    } finally { checkState.running = false; NATIVE?.setBusy(false); $('bpBtn').disabled = !isConnected(); }
   };
   $('bpManualBtn').onclick = () => {
     const v = prompt('Blood pressure from your arm cuff (e.g. 128/82):'); if (!v) return;
@@ -1446,7 +1462,78 @@
   $('copyLog').onclick = async () => { try { await navigator.clipboard.writeText(logLines.join('\n')); log('Log copied.'); } catch { log('Copy failed.'); } };
 
   // ---------- Start ----------
+  // ---------- Android app mode ----------
+  function pushProfile() {
+    if (!NATIVE) return;
+    const d = derived();
+    NATIVE.setProfile(JSON.stringify(Object.assign({}, profile, { stepGoal: d ? d.stepGoal : 8000 })));
+  }
+  function minuteOf(t) { return Math.floor((t - new Date(t).setHours(0, 0, 0, 0)) / MIN); }
+  function ingest(e) {
+    ensureDay();
+    const t = e.t || now();
+    const today = dayKey(t) === dayKey();
+    switch (e.type) {
+      case 'conn':
+        nativeConnected = !!e.connected;
+        setConn(nativeConnected, nativeConnected ? 'Connected' : (e.address || e.hasDevice ? 'Reconnecting…' : 'Not connected'));
+        if (e.battery != null) onBattery(e.battery);
+        if (e.steps != null) onSport(e.steps, e.m, e.kcal);
+        break;
+      case 'hr': onHeartRate(e.bpm); break;
+      case 'batt': onBattery(e.v); break;
+      case 'steps':
+        if (today) onSport(e.steps, e.m, e.kcal);
+        else withDay(t, r => { if (!r.steps || r.steps.steps < e.steps) r.steps = { steps: e.steps, meters: e.m, kcal: e.kcal, t }; });
+        break;
+      case 'hrm':
+        withDay(t, r => { const m = minuteOf(t); if (!r.hr[m]) r.hr[m] = [e.avg * e.n, e.n, e.min, e.max]; });
+        break;
+      case 'pkt':
+        if (now() - t > 5000) handleHistory(e.cmd, e.payload, t); else handlePacket(e.cmd, e.payload);
+        break;
+      case 'check': {
+        let st = null;
+        if (e.resting && e.hr && today) { st = estimateStress(e.hr); if (st) live.stress = st; }
+        withDay(t, r => r.checks.push({ t, hr: e.hr, resting: !!e.resting, spo2: null, stress: st ? st.score : null, auto: true }));
+        break;
+      }
+      case 'spo2':
+        withDay(t, r => r.spo2.push({ t, v: e.v, src: e.src || 'auto' }));
+        if (today) live.lastSpo2 = { v: e.v, t };
+        break;
+      case 'alert':
+        withDay(t, r => r.alerts.push({ t, level: e.level, title: e.title, detail: e.detail }));
+        if (now() - t < 120000) showBanner(e);
+        break;
+      case 'synced':
+        $('watchInfo').textContent = `Synced ${new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}: clock, profile, step goal, settings and history.`;
+        break;
+    }
+  }
+  if (NATIVE) {
+    $('wakeBtn').hidden = true;
+    $('bgBtn').hidden = false;
+    $('bgBtn').onclick = () => NATIVE.batteryExemption();
+    let renderTimer = null;
+    window.__hdNative = e => {
+      try { ingest(e); } catch (err) { log('App event error: ' + err.message); }
+      if (!['hr', 'steps', 'batt'].includes(e.type)) { clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 300); }
+    };
+    window.__hdResume = () => {
+      try {
+        const evts = JSON.parse(NATIVE.drain());
+        evts.forEach(e => { try { ingest(e); } catch (err) { log('Replay error: ' + err.message); } });
+        if (evts.length) log(`Loaded ${evts.length} readings recorded in the background.`);
+        ingest(Object.assign({ type: 'conn' }, JSON.parse(NATIVE.status())));
+      } catch (err) { log('Resume failed: ' + err.message); }
+      saveDay(); renderAll();
+    };
+    $('watchInfo').textContent = 'The app keeps the watch connected in the background, runs your scheduled checks and sends alerts even when this screen is closed. Tap "Allow background running" so Android doesn\'t stop it.';
+  }
+
   ensureDay(); loadProfileForm(); renderAll(); initSW();
+  if (NATIVE) { pushProfile(); window.__hdResume(); }
   // ---------- Tabs ----------
   const TABS = ['today', 'check', 'sleep', 'weight', 'trends', 'tips', 'settings'];
   function showTab(name) {
