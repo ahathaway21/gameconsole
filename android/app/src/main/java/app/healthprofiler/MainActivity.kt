@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private var svc: WatchService? = null
     private var visible = false
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private var pickAfterPermission = false
 
     companion object {
         private const val REQ_PERMS = 1
@@ -155,7 +156,20 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (hasPermissions() && Prefs.address(this) != null) WatchService.start(this)
+        if (hasPermissions()) {
+            if (Prefs.address(this) != null) WatchService.start(this)
+            if (pickAfterPermission) { pickAfterPermission = false; pickDevice() }
+        } else if (pickAfterPermission) {
+            pickAfterPermission = false
+            AlertDialog.Builder(this)
+                .setTitle("Bluetooth permission needed")
+                .setMessage("Health Profiler needs the \"Nearby devices\" permission to find and connect to your watch. Open the app settings and allow it under Permissions.")
+                .setPositiveButton("Open settings") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     // ---------------------------------------------------------------------------------
@@ -163,10 +177,21 @@ class MainActivity : Activity() {
     // ---------------------------------------------------------------------------------
     @SuppressLint("MissingPermission")
     private fun pickDevice() {
-        if (!hasPermissions()) { requestNeededPermissions(); return }
+        if (!hasPermissions()) {
+            pickAfterPermission = true
+            val missing = neededPermissions().filter { it != Manifest.permission.POST_NOTIFICATIONS &&
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+            requestPermissions(missing.toTypedArray(), REQ_PERMS)
+            return
+        }
         val bm = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-        val adapter = bm.adapter ?: return
-        if (!adapter.isEnabled) { startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)); return }
+        val adapter = bm.adapter
+        if (adapter == null) { message("This phone doesn't support Bluetooth Low Energy."); return }
+        if (!adapter.isEnabled) {
+            try { startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+            catch (_: Exception) { message("Turn on Bluetooth, then tap Connect again.") }
+            return
+        }
 
         val found = LinkedHashMap<String, String>()
         val items = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf())
@@ -186,7 +211,7 @@ class MainActivity : Activity() {
         val stopScan = { try { scanner?.stopScan(scanCb) } catch (_: Exception) {} }
 
         AlertDialog.Builder(this)
-            .setTitle("Choose your watch")
+            .setTitle(if (found.isEmpty()) "Choose your watch (searching…)" else "Choose your watch")
             .setAdapter(items) { _, which ->
                 stopScan()
                 val addr = found.keys.elementAt(which)
@@ -202,6 +227,10 @@ class MainActivity : Activity() {
             .show()
         try { scanner?.startScan(scanCb) } catch (_: Exception) {}
         main.postDelayed({ stopScan() }, 15_000)
+    }
+
+    private fun message(text: String) {
+        AlertDialog.Builder(this).setMessage(text).setPositiveButton("OK", null).show()
     }
 
     @SuppressLint("BatteryLife")
@@ -232,7 +261,7 @@ class MainActivity : Activity() {
                 .put("batteryExempt", (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName))
                 .toString()
 
-        @JavascriptInterface fun pickDevice() { main.post { pickDevice() } }
+        @JavascriptInterface fun pickDevice() { main.post { this@MainActivity.pickDevice() } }
 
         @JavascriptInterface fun forget() {
             main.post { Prefs.setDevice(ctx, null, null); WatchService.stop(ctx); sendToPage(JSONObject().put("type", "conn").put("connected", false)) }
@@ -256,6 +285,6 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun sync() { svc?.syncWatch() }
 
-        @JavascriptInterface fun batteryExemption() { main.post { askBatteryExemption() } }
+        @JavascriptInterface fun batteryExemption() { main.post { this@MainActivity.askBatteryExemption() } }
     }
 }
