@@ -31,7 +31,7 @@
   button:disabled { opacity: .5; cursor: default; }
   button.sm { padding: 5px 10px; font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
   .stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
   .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
   .stat span { color: var(--muted); font-size: 12px; }
@@ -74,6 +74,7 @@
     <div class="stats">
       <div class="stat"><b id="hr">–</b><span>Heart rate (bpm)</span></div>
       <div class="stat"><b id="batt">–</b><span>Battery (%)</span></div>
+      <div class="stat"><b id="steps">–</b><span>Steps</span></div>
       <div class="stat"><b id="svcCount">–</b><span>Services found</span></div>
     </div>
     <div id="devInfo" class="muted" style="margin-top:10px"></div>
@@ -125,7 +126,8 @@
     [s16('2a37')]: 'Heart Rate Measurement', [s16('2a38')]: 'Body Sensor Location',
     [s16('2a19')]: 'Battery Level', [s16('2a29')]: 'Manufacturer', [s16('2a24')]: 'Model Number',
     [s16('2a25')]: 'Serial Number', [s16('2a26')]: 'Firmware Rev', [s16('2a27')]: 'Hardware Rev',
-    [s16('2a28')]: 'Software Rev', [s16('2a00')]: 'Device Name', [s16('2a01')]: 'Appearance',
+    [s16('2a28')]: 'Software Rev', [s16('fea1')]: 'Sport data (steps)', [s16('fea2')]: 'Sport target',
+    [s16('fec9')]: 'Device address', [s16('fec7')]: 'Vendor write', [s16('fec8')]: 'Vendor indicate', [s16('2a00')]: 'Device Name', [s16('2a01')]: 'Appearance',
     [s16('2a2b')]: 'Current Time', [s16('2a50')]: 'PnP ID', [s16('2a23')]: 'System ID',
     '6e400002-b5a3-f393-e0a9-e50e24dcca9e': 'UART RX (write to watch)',
     '6e400003-b5a3-f393-e0a9-e50e24dcca9e': 'UART TX (watch sends)',
@@ -134,6 +136,16 @@
   const $ = id => document.getElementById(id);
   let device = null, server = null;
   const listening = [];
+  // Android allows only one GATT operation at a time: run every one through a queue.
+  let gattQ = Promise.resolve();
+  const gatt = fn => { const p = gattQ.then(fn); gattQ = p.catch(() => {}); return p; };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  async function readWithRetry(ch, tries = 3) {
+    for (let i = 1; ; i++) {
+      try { return await gatt(() => ch.readValue()); }
+      catch (e) { if (i >= tries) throw e; await wait(250 * i); }
+    }
+  }
   const logLines = [];
 
   if (!navigator.bluetooth) {
@@ -169,6 +181,18 @@
       const p = dv.getUint8(0);
       $('batt').textContent = p;
       return `${p}%`;
+    }
+    if (charUuid === s16('fea1') && dv.byteLength >= 4) {
+      // Sport data: flags byte, then 3-byte little-endian values.
+      const u24 = o => dv.getUint8(o) | (dv.getUint8(o + 1) << 8) | (dv.getUint8(o + 2) << 16);
+      const flags = dv.getUint8(0); let o = 1; const out = [];
+      if (flags & 1 && dv.byteLength >= o + 3) { const st = u24(o); o += 3; $('steps').textContent = st; out.push(`${st} steps`); }
+      if (flags & 2 && dv.byteLength >= o + 3) { out.push(`${u24(o)} m`); o += 3; }
+      if (flags & 4 && dv.byteLength >= o + 3) { out.push(`${u24(o)} kcal`); o += 3; }
+      return out.join(', ');
+    }
+    if (charUuid === s16('fec9') && dv.byteLength === 6) {
+      return 'MAC ' + Array.from(new Uint8Array(dv.buffer, dv.byteOffset, 6)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(':');
     }
     if ([s16('2a29'), s16('2a24'), s16('2a25'), s16('2a26'), s16('2a27'), s16('2a28'), s16('2a00')].includes(charUuid)) {
       return new TextDecoder().decode(dv);
@@ -232,6 +256,7 @@
       return;
     }
     const info = [];
+    const autoListen = [];
     for (const svc of services) {
       const det = document.createElement('details');
       det.open = true;
@@ -257,12 +282,12 @@
 
         if (p.read) {
           const b = btn('Read', async () => {
-            try { const dv = await ch.readValue(); show(dv); log(`READ ${short(ch.uuid)}: ${hex(dv)}`); }
+            try { const dv = await readWithRetry(ch); show(dv); log(`READ ${short(ch.uuid)}: ${hex(dv)}`); }
             catch (e) { log(`read ${short(ch.uuid)} failed: ${e.message}`); }
           });
           row.appendChild(b);
           try {
-            const dv = await ch.readValue(); show(dv);
+            const dv = await readWithRetry(ch); show(dv);
             log(`  ${short(ch.uuid)} ${cname} = ${decode(ch.uuid, dv) || hex(dv)}`);
             if (svc.uuid === s16('180a') || ch.uuid === s16('2a00')) {
               const d = decode(ch.uuid, dv); if (d) info.push(`${cname}: ${d}`);
@@ -280,7 +305,7 @@
           row.appendChild(entry.button);
           listening.push(entry);
           // Auto-listen to standard heart rate & battery.
-          if (ch.uuid === s16('2a37') || ch.uuid === s16('2a19')) toggleListen(entry);
+          if ([s16('2a37'), s16('2a19'), s16('fea1')].includes(ch.uuid)) autoListen.push(entry);
         }
         if (p.write || p.writeWithoutResponse) {
           const inp = document.createElement('input');
@@ -291,8 +316,7 @@
             if (!clean || clean.length % 2) { log('Enter an even number of hex digits.'); return; }
             const bytes = new Uint8Array(clean.match(/../g).map(h => parseInt(h, 16)));
             try {
-              if (p.write) await ch.writeValueWithResponse(bytes);
-              else await ch.writeValueWithoutResponse(bytes);
+              await gatt(() => p.write ? ch.writeValueWithResponse(bytes) : ch.writeValueWithoutResponse(bytes));
               log(`WRITE ${short(ch.uuid)}: ${hex(new DataView(bytes.buffer))}`);
             } catch (e) { log(`write failed: ${e.message}`); }
           }));
@@ -301,6 +325,7 @@
     }
     $('devInfo').textContent = info.join(' · ');
     log('Discovery finished.');
+    for (const e of autoListen) await toggleListen(e);
   }
 
   function btn(text, fn) {
@@ -311,12 +336,12 @@
   async function toggleListen(entry) {
     try {
       if (!entry.on) {
-        await entry.ch.startNotifications();
+        await gatt(() => entry.ch.startNotifications());
         entry.ch.addEventListener('characteristicvaluechanged', entry.handler);
         entry.on = true; entry.button.textContent = 'Stop';
         log(`Listening to ${short(entry.ch.uuid)}`);
       } else {
-        await entry.ch.stopNotifications();
+        await gatt(() => entry.ch.stopNotifications());
         entry.ch.removeEventListener('characteristicvaluechanged', entry.handler);
         entry.on = false; entry.button.textContent = 'Listen';
         log(`Stopped ${short(entry.ch.uuid)}`);
