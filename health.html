@@ -86,6 +86,9 @@
   .stats b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
   .stats span { font-size: 11.5px; color: var(--muted); }
   #wChart { height: 170px; }
+  #histTable th, #histTable td { padding: 6px 4px; text-align: right; border-top: 1px solid var(--line); white-space: nowrap; }
+  #histTable th:first-child, #histTable td:first-child { text-align: left; }
+  #histTable th { color: var(--muted); font-weight: 600; font-size: 11.5px; border-top: 0; }
   .wrow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; font-variant-numeric: tabular-nums; }
   .wrow:first-child { border-top: 0; }
   .wrow button { padding: 2px 8px; font-size: 12px; }
@@ -128,6 +131,8 @@
     <div class="tile"><div class="label">Steps</div><div class="value" id="stepsVal">–</div><div class="bar"><i id="stepsBar"></i></div><div class="note" id="stepsNote">Goal –</div></div>
     <div class="tile"><div class="label">Distance</div><div class="value" id="distVal">–<small> mi</small></div><div class="note" id="kcalNote">– kcal</div></div>
     <div class="tile"><div class="label">Resting HR today</div><div class="value" id="restVal">–<small> bpm</small></div><div class="note" id="restNote">Lowest resting check</div></div>
+    <div class="tile"><div class="label">Blood pressure</div><div class="value" id="bpVal">–<small> mmHg</small></div><div class="note" id="bpNote">Reference only</div></div>
+    <div class="tile"><div class="label">CPAP last night</div><div class="value" id="cpapVal">–<small> h</small></div><div class="note" id="cpapNote">Import or enter data</div></div>
   </section>
 
   <div class="card">
@@ -136,6 +141,8 @@
     <div class="row">
       <button class="primary" id="checkBtn" disabled>Run health check</button>
       <button id="spo2ManualBtn" class="sm">Enter SpO2 from watch</button>
+      <button id="bpBtn" class="sm" disabled>Measure blood pressure</button>
+      <button id="bpManualBtn" class="sm">Enter BP from cuff</button>
     </div>
     <div id="progress" class="muted"></div>
     <div id="results" style="margin-top:6px"></div>
@@ -149,6 +156,49 @@
       <div><b id="statMin">–</b><span>Lowest</span></div>
       <div><b id="statMax">–</b><span>Highest</span></div>
     </div>
+  </div>
+
+  <div class="card" id="cpapCard">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Sleep therapy (CPAP)</h2><span class="muted" id="cpapSub"></span></div>
+    <p class="muted" style="margin:6px 0 10px">ResMed machines save detailed nightly data to their SD card. Put the card in your phone (USB-C card reader) and pick the file <b>STR.edf</b> from the card's main folder. Or type in last night's numbers from the myAir app.</p>
+    <div class="row">
+      <label class="sm" style="display:inline-block"><input type="file" id="cpapFile" accept=".edf,.EDF" multiple hidden><span class="pill" style="cursor:pointer;padding:8px 12px">📂 Import STR.edf</span></label>
+      <button class="sm" id="cpapManualBtn">Enter from myAir</button>
+    </div>
+    <div id="cpapManual" hidden style="margin-top:10px">
+      <div class="grid2">
+        <div><label>Night of<input type="date" id="cDate"></label></div>
+        <div><label>Usage (hours)<input type="number" id="cHours" step="0.1" min="0" max="24" inputmode="decimal"></label></div>
+        <div><label>Events per hour (AHI)<input type="number" id="cAhi" step="0.1" min="0" max="150" inputmode="decimal"></label></div>
+        <div><label>Mask seal / leak (L/min, optional)<input type="number" id="cLeak" step="1" min="0" max="120" inputmode="decimal"></label></div>
+      </div>
+      <div class="row" style="margin-top:8px"><button class="primary sm" id="cSave">Save night</button><button class="sm" id="cCancel">Cancel</button></div>
+    </div>
+    <div class="stats" style="margin-top:12px">
+      <div><b id="cpapAhi">–</b><span>AHI last night</span></div>
+      <div><b id="cpapComp">–</b><span>Nights ≥4 h (30 d)</span></div>
+      <div><b id="cpapAvg">–</b><span>Avg hours (30 d)</span></div>
+    </div>
+    <canvas id="cpapChart" aria-label="CPAP usage and AHI, last 30 nights" style="height:150px;margin-top:10px"></canvas>
+    <div class="muted" id="cpapLegend" style="font-size:12px"></div>
+    <div id="cpapDetail" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Last 7 days</h2>
+    <div style="overflow-x:auto"><table id="histTable" style="width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums"></table></div>
+    <div class="muted" style="margin-top:6px;font-size:12px">Steps and heart rate from earlier days come from the watch's own memory when you connect (it keeps about 2 days).</div>
+  </div>
+
+  <div class="card">
+    <h2>Watch</h2>
+    <div class="row">
+      <button class="sm" id="syncBtn" disabled>Sync now</button>
+      <button class="sm" id="findBtn" disabled>Find my watch</button>
+    </div>
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="wAutoHR"> Watch measures heart rate by itself every 10 min (fills gaps when this page is closed)</label>
+    <label class="check"><input type="checkbox" id="wSedentary"> Watch vibrates after 1 hour of sitting (8am–9pm)</label>
+    <div class="muted" id="watchInfo" style="margin-top:6px">On every connect the dashboard sets the watch's clock, sends your height/weight/age and step goal, and downloads its stored history.</div>
   </div>
 
   <div class="card" id="weightCard">
@@ -191,6 +241,7 @@
         <div><label>Weight (lb)<input type="number" id="pWeight" min="50" max="700" inputmode="decimal"></label></div>
         <div><label>Height (ft)<input type="number" id="pFt" min="3" max="8" inputmode="numeric"></label></div>
         <div><label>Height (in)<input type="number" id="pIn" min="0" max="11" inputmode="numeric"></label></div>
+        <div><label>Sex (for calorie estimates)<select id="pSex"><option value="">Not set</option><option value="m">Male</option><option value="f">Female</option></select></label></div>
         <div><label>Goal weight (lb, optional)<input type="number" id="pGoal" min="50" max="700" inputmode="decimal" placeholder="default: 7% loss"></label></div>
         <div><label>Weekly weigh-in reminder<select id="pWRemind"><option value="1">On</option><option value="0">Off</option></select></label></div>
         <div><label>Auto heart-rate check every<select id="pHrEvery">
@@ -231,7 +282,7 @@
     sportSvc: S('fee7'), sportChar: S('fea1'), moySvc: S('feea'), moyOut: S('fee2'), moyIn: S('fee3'),
   };
   // Moyoung (Da Fit) command ids, as documented by the open-source Gadgetbridge project.
-  const CMD = { MSG: 65, FIND: 97, BP: 105, SPO2: 107, HR: 109 };
+  const CMD = { MSG: 65, FIND: 97, BP: 105, SPO2: 107, HR: 109, TIME: 49, PAST: 51, HRHIST: 53, USER: 18, GOAL: 22, HRAUTO: 31, SEDENTARY: 29, MOVE: 115, ADV: 0xb9 };
 
   const $ = id => document.getElementById(id);
   const now = () => Date.now();
@@ -252,7 +303,7 @@
   const hex = arr => Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
   // ---------- Profile ----------
-  const DEFAULT_PROFILE = { age: null, weight: null, ft: null, inch: null, goal: null, wRemind: 1, hrEvery: 15, spo2Every: 60, watch: true, phone: true, inactive: true };
+  const DEFAULT_PROFILE = { age: null, weight: null, ft: null, inch: null, sex: '', goal: null, wRemind: 1, autoHR: true, sedentary: false, hrEvery: 15, spo2Every: 60, watch: true, phone: true, inactive: true };
   let profile = Object.assign({}, DEFAULT_PROFILE, store.get('hd.profile', {}));
   const hasProfile = () => profile.age && profile.weight && profile.ft != null && profile.inch != null;
   function derived() {
@@ -272,6 +323,7 @@
   function loadProfileForm() {
     $('pAge').value = profile.age ?? ''; $('pWeight').value = profile.weight ?? '';
     $('pFt').value = profile.ft ?? ''; $('pIn').value = profile.inch ?? '';
+    $('pSex').value = profile.sex || ''; $('wAutoHR').checked = profile.autoHR !== false; $('wSedentary').checked = !!profile.sedentary;
     $('pGoal').value = profile.goal ?? ''; $('pWRemind').value = String(profile.wRemind ?? 1);
     $('pHrEvery').value = String(profile.hrEvery); $('pSpo2Every').value = String(profile.spo2Every);
     $('pWatch').checked = profile.watch; $('pPhone').checked = profile.phone; $('pInactive').checked = profile.inactive;
@@ -287,6 +339,7 @@
   $('saveProfile').onclick = () => {
     const num = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
     profile = { age: num('pAge'), weight: num('pWeight'), ft: num('pFt'), inch: num('pIn') ?? 0,
+      sex: $('pSex').value, autoHR: $('wAutoHR').checked, sedentary: $('wSedentary').checked,
       goal: num('pGoal'), wRemind: +$('pWRemind').value,
       hrEvery: +$('pHrEvery').value, spo2Every: +$('pSpo2Every').value,
       watch: $('pWatch').checked, phone: $('pPhone').checked, inactive: $('pInactive').checked };
@@ -294,6 +347,7 @@
     if (profile.weight && !weights.length) addWeight(profile.weight, todayStr(), true);
     if (profile.phone) askNotifyPermission();
     renderDerived(); renderAll();
+    if (device?.gatt.connected) syncWatch();
     log('Profile saved.');
   };
 
@@ -458,6 +512,7 @@
     $('connText').textContent = text || (on ? 'Connected' : 'Not connected');
     $('connectBtn').hidden = on; $('disconnectBtn').hidden = !on;
     $('checkBtn').disabled = !on;
+    for (const id of ['bpBtn', 'syncBtn', 'findBtn']) $(id).disabled = !on;
   }
 
   if (!navigator.bluetooth) {
@@ -497,6 +552,7 @@
       await listen(chars.batt, ev => onBattery(ev.target.value.getUint8(0)));
       await listen(chars.in, ev => onMoyoungData(new Uint8Array(ev.target.value.buffer, ev.target.value.byteOffset, ev.target.value.byteLength)));
       if (!chars.out) log('Watch command channel not found: SpO2 measurement and watch messages will not work.');
+      else syncWatch();
     } catch (e) {
       log('Connect failed: ' + e.message);
       setConn(false);
@@ -580,7 +636,92 @@
     inBuf = inBuf.slice(len);
     handlePacket(cmd, payload);
   }
+  // Write data into another day's stored record (used for history from the watch).
+  function withDay(t, fn) {
+    const k = dayKey(t);
+    if (k === dayK) { fn(day); saveDay(); return; }
+    const rec = Object.assign({ hr: {}, checks: [], spo2: [], steps: null, alerts: [] }, store.get(k, {}));
+    fn(rec); store.set(k, rec);
+  }
+  const u24le = (p, o) => p[o] | (p[o + 1] << 8) | (p[o + 2] << 16);
+  function handleHistory(cmd, payload) {
+    if (cmd === CMD.PAST && (payload[0] === 1 || payload[0] === 2) && payload.length >= 10) {
+      const daysAgo = payload[0], steps = u24le(payload, 1), meters = u24le(payload, 4), kcal = u24le(payload, 7);
+      withDay(now() - daysAgo * 86400000, r => { if (!r.steps || r.steps.steps < steps) r.steps = { steps, meters, kcal, t: now(), src: 'watch' }; });
+      log(`History: ${daysAgo} day(s) ago ${steps} steps`);
+      renderHistory();
+      return true;
+    }
+    if (cmd === CMD.HRHIST && payload.length >= 2) {
+      const idx = payload[0], daysAgo = idx >> 2, startHour = (idx % 4) * 6;
+      const base = new Date(now() - daysAgo * 86400000); base.setHours(0, 0, 0, 0);
+      let n = 0;
+      withDay(base.getTime() + 3600000, r => {
+        for (let i = 1; i < payload.length && i <= 72; i++) {
+          const hr = payload[i]; if (hr < 30 || hr > 220) continue;
+          const m = startHour * 60 + (i - 1) * 5;
+          if (base.getTime() + m * MIN > now()) continue;
+          if (!r.hr[m]) { r.hr[m] = [hr, 1, hr, hr]; n++; }
+        }
+      });
+      log(`HR history block ${idx}: ${n} new samples`);
+      if (idx < 7) moySend(CMD.HRHIST, [idx + 1]); else { log('HR history sync finished.'); renderAll(); }
+      return true;
+    }
+    if (cmd === CMD.ADV && payload[0] === 0x11) {
+      if (payload[1] === 0x00 && payload[2] > 0 && payload[2] < 255) {
+        live.stress = { score: payload[2], basis: 'Measured by the watch.', watch: true }; renderStress();
+      } else if (payload[1] === 0x03) {
+        const daysAgo = payload[2]; let last = null;
+        const vals = [];
+        for (let i = 0; i + 3 < payload.length && i < 48; i++) {
+          const v = payload[3 + i]; if (!v || v === 255) continue;
+          const t = new Date(now() - daysAgo * 86400000); t.setHours(i >> 1, (i % 2) * 30, 0, 0);
+          if (t.getTime() > now()) continue;
+          vals.push({ t: t.getTime(), v }); last = v;
+        }
+        if (vals.length) {
+          withDay(now() - daysAgo * 86400000, r => { r.watchStress = vals; });
+          if (daysAgo === 0 && last) { live.stress = { score: last, basis: 'Measured by the watch.', watch: true }; renderStress(); }
+          log(`Watch stress: ${vals.length} readings for ${daysAgo} day(s) ago`);
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Sync clock, profile and settings to the watch, then pull its stored history.
+  async function syncWatch() {
+    if (!chars.out) return;
+    // The watch keeps time as "local wall clock expressed in GMT+8".
+    const wall = now() - new Date().getTimezoneOffset() * MIN;
+    const wt = Math.floor((wall - 8 * 3600000) / 1000);
+    await moySend(CMD.TIME, [(wt >>> 24) & 255, (wt >>> 16) & 255, (wt >>> 8) & 255, wt & 255, 8]);
+    if (hasProfile()) {
+      const cm = Math.round((profile.ft * 12 + profile.inch) * 2.54), kg = Math.min(250, Math.round(profile.weight * 0.4536));
+      await moySend(CMD.USER, [cm & 255, kg & 255, profile.age & 255, profile.sex === 'f' ? 0 : 1]);
+      const goal = derived().stepGoal;
+      await moySend(CMD.GOAL, [(goal >>> 24) & 255, (goal >>> 16) & 255, (goal >>> 8) & 255, goal & 255]);
+    }
+    await moySend(CMD.HRAUTO, [profile.autoHR !== false ? 2 : 0]);
+    await moySend(CMD.SEDENTARY, [profile.sedentary ? 1 : 0]);
+    if (profile.sedentary) await moySend(CMD.MOVE, [60, 50, 8, 21]);
+    await moySend(CMD.PAST, [1]);
+    await moySend(CMD.PAST, [2]);
+    await moySend(CMD.ADV, [0x11, 0x03, 0x00]);
+    await moySend(CMD.ADV, [0x11, 0x03, 0x01]);
+    await moySend(CMD.HRHIST, [0]);
+    $('watchInfo').textContent = `Synced ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}: clock, profile, step goal, settings and history.`;
+  }
+  $('syncBtn').onclick = syncWatch;
+  $('findBtn').onclick = () => moySend(CMD.FIND, []);
+  $('wAutoHR').onchange = () => { profile.autoHR = $('wAutoHR').checked; store.set('hd.profile', profile); moySend(CMD.HRAUTO, [profile.autoHR ? 2 : 0]); };
+  $('wSedentary').onchange = async () => { profile.sedentary = $('wSedentary').checked; store.set('hd.profile', profile); await moySend(CMD.SEDENTARY, [profile.sedentary ? 1 : 0]); if (profile.sedentary) moySend(CMD.MOVE, [60, 50, 8, 21]); };
+
   function handlePacket(cmd, payload) {
+    if (handleHistory(cmd, payload)) return;
+    if (cmd === CMD.BP && payload.length >= 3 && payload[1] !== 255 && payload[1] > 60 && payload[2] > 30) onBP(payload[1], payload[2], 'watch');
     if (cmd === CMD.HR && payload[0] > 25 && payload[0] < 240) onHeartRate(payload[0]);
     if (cmd === CMD.SPO2 && payload[0] >= 70 && payload[0] <= 100) log(`Watch reported SpO2 ${payload[0]}%`);
     for (let i = moyWaiters.length - 1; i >= 0; i--) {
@@ -809,6 +950,14 @@
       title: () => 'Weigh yourself regularly',
       text: c => `People who weigh themselves daily or weekly lose more weight and regain less than those who rarely weigh in. ${c.wcount ? `You've logged ${c.wcount} weigh-in${c.wcount > 1 ? 's' : ''} so far.` : 'Log your first weight in the Weight section.'}`,
       src: 'Zheng et al., Obesity, 2015; Steinberg et al., Annals of Behavioral Medicine, 2015' },
+    { id: 'cpap', when: c => c.cpap && (c.cpap.comp != null && c.cpap.comp < 70 || (c.cpap.last.hours < 6)),
+      title: () => 'More CPAP hours, more benefit',
+      text: c => `Studies show the benefits of CPAP — less daytime sleepiness, better memory and lower blood pressure — keep growing with more hours of use per night, with many people needing 6+ hours for full benefit. ${c.cpap.comp != null ? `You used it 4+ hours on ${c.cpap.comp}% of the last 30 nights (common target: 70%).` : ''} If the mask is uncomfortable, ask your supplier about other mask styles or humidity settings.`,
+      src: 'Weaver et al., Sleep, 2007; AASM clinical practice guideline, 2019' },
+    { id: 'bp', when: c => c.bp && (c.bp.sys >= 120 || c.bp.dia >= 80),
+      title: () => 'Lower blood pressure with food and activity',
+      text: () => 'The DASH eating pattern (vegetables, fruit, low-fat dairy, whole grains, less red meat and sugar) combined with less salt lowered systolic blood pressure by about 7–11 points in trials. Regular aerobic exercise and weight loss lower it further. Confirm readings with an arm cuff.',
+      src: 'Sacks et al., NEJM, 2001 (DASH-Sodium); ACC/AHA guideline, 2017' },
     { id: 'activity', when: c => c.d,
       title: c => `150 minutes a week in your moderate zone (${c.d.moderate[0]}–${c.d.moderate[1]} bpm)`,
       text: () => 'National guidelines recommend at least 150 minutes a week of moderate activity, like brisk walking, plus muscle-strengthening on 2 days. Short bouts count.',
@@ -829,7 +978,7 @@
       title: () => 'Break up long sitting every 30 minutes',
       text: () => 'Getting up for 2 minutes of light walking every 20–30 minutes lowered blood sugar and insulin after meals compared with uninterrupted sitting.',
       src: 'Dunstan et al., Diabetes Care, 2012' },
-    { id: 'sleep', when: c => c.d && (c.d.bmi >= 35 || (c.spo2 != null && c.spo2 < 95)),
+    { id: 'sleep', when: c => c.d && !c.cpap && (c.d.bmi >= 35 || (c.spo2 != null && c.spo2 < 95)),
       title: () => 'Get 7+ hours of sleep — and ask about sleep apnea',
       text: c => `Adults need at least 7 hours of sleep a night. Obesity${c.spo2 != null && c.spo2 < 95 ? ' and low blood-oxygen readings are' : ' is'} a major risk factor for obstructive sleep apnea, which is common and treatable. If you snore loudly or feel sleepy during the day, ask your doctor about a sleep study.`,
       src: 'Watson et al., AASM/SRS consensus, Sleep, 2015; AASM' },
@@ -844,11 +993,12 @@
     const rest = (() => { const r = day.checks.filter(c => c.resting && c.hr).map(c => c.hr); return r.length ? Math.min(...r) : null; })();
     const spo2 = day.spo2.length ? day.spo2[day.spo2.length - 1].v : null;
     const stress = live.stress?.score ?? ([...day.checks].reverse().find(c => c.stress != null)?.stress ?? null);
-    const c = { d, steps: live.steps ?? day.steps?.steps ?? null, rest, spo2, stress, wcount: weights.length };
+    const cst = cpapStats(); const bpl = (day.bp || [])[(day.bp || []).length - 1] || null;
+    const c = { d, steps: live.steps ?? day.steps?.steps ?? null, rest, spo2, stress, wcount: weights.length, cpap: cst, bp: bpl };
     const list = TIPS.filter(t => { try { return t.when(c); } catch { return false; } });
     if (!d) { $('tips').innerHTML = '<div class="muted">Fill in your profile (below) to get personalised suggestions.</div>'; return; }
     // Put the most situation-specific tips first.
-    const priority = ['spo2', 'stress', 'restHR', 'steps', 'weight', 'weighing', 'sleep', 'activity', 'meals', 'sitting'];
+    const priority = ['spo2', 'bp', 'cpap', 'stress', 'restHR', 'steps', 'weight', 'weighing', 'sleep', 'activity', 'meals', 'sitting'];
     list.sort((a, b) => priority.indexOf(a.id) - priority.indexOf(b.id));
     $('tips').innerHTML = '';
     for (const t of list.slice(0, 6)) {
@@ -858,6 +1008,227 @@
       el.querySelector('.src').textContent = 'Source: ' + t.src;
       $('tips').appendChild(el);
     }
+  }
+
+  // ---------- Blood pressure ----------
+  function assessBP(sys, dia) {
+    // ACC/AHA 2017 categories.
+    if (sys > 180 || dia > 120) return { level: 'urgent', title: `Blood pressure very high: ${sys}/${dia}`, detail: 'Above 180/120 is a hypertensive crisis range. Wait 5 minutes and re-check with an arm cuff. If it is still this high, or you have chest pain, shortness of breath, back pain, numbness, vision changes or trouble speaking, call 911.', watch: `BP ${sys}/${dia} very high. Recheck w/ cuff; 911 if symptoms.` };
+    if (sys >= 140 || dia >= 90) return { level: 'alert', title: `Blood pressure high: ${sys}/${dia} (stage 2 range)`, detail: 'At or above 140/90. Confirm with an arm cuff, sitting quietly for 5 minutes first. Repeated readings in this range should be reviewed by your doctor.', watch: `BP ${sys}/${dia} high. Confirm with arm cuff.` };
+    if (sys >= 130 || dia >= 80) return { level: 'caution', title: `Blood pressure ${sys}/${dia} (stage 1 range)`, detail: '130–139 / 80–89 is stage 1 high blood pressure. Lifestyle changes help: less salt, more activity, weight loss, and limiting alcohol. Confirm with an arm cuff.', watch: `BP ${sys}/${dia} above normal.` };
+    if (sys >= 120) return { level: 'caution', title: `Blood pressure ${sys}/${dia} (elevated)`, detail: '120–129 with bottom number under 80 is "elevated". Regular activity and less salt help keep it from rising.' };
+    return { level: 'ok', title: `Blood pressure ${sys}/${dia}`, detail: 'In the normal range (under 120/80).' };
+  }
+  function onBP(sys, dia, src) {
+    ensureDay(); (day.bp || (day.bp = [])).push({ t: now(), sys, dia, src }); saveDay();
+    const a = assessBP(sys, dia);
+    if (src === 'watch') a.detail += ' Note: wrist-watch blood pressure is an estimate, not a validated measurement — use an arm cuff for decisions.';
+    renderBP(); renderResults([a]); renderTips(); renderHistory();
+    raise('bp', src === 'watch' && a.level !== 'urgent' ? Object.assign({}, a, { level: a.level === 'alert' ? 'caution' : a.level }) : a, 60);
+  }
+  $('bpBtn').onclick = async () => {
+    if (checkState.running) return;
+    checkState.running = true; $('bpBtn').disabled = true;
+    try {
+      const pending = waitPacket(CMD.BP, p => p.length >= 3 && p[1] !== 255 && p[1] > 60, 70000);
+      await moySend(CMD.BP, [0, 0, 0]);
+      let done = false; pending.then(() => { done = true; });
+      for (let i = 70; i > 0 && !done; i--) { progress(`Measuring blood pressure (estimate)… up to ${i}s. Sit still, arm resting at heart level.`); await wait(1000); }
+      const res = await pending;
+      await moySend(CMD.BP, [255, 255, 255]);
+      progress(res ? '' : 'The watch did not return a blood-pressure reading.');
+    } finally { checkState.running = false; $('bpBtn').disabled = !device?.gatt.connected; }
+  };
+  $('bpManualBtn').onclick = () => {
+    const v = prompt('Blood pressure from your arm cuff (e.g. 128/82):'); if (!v) return;
+    const m = v.match(/(\d{2,3})\s*[\/ ]\s*(\d{2,3})/); if (!m) return;
+    onBP(+m[1], +m[2], 'cuff');
+  };
+  function renderBP() {
+    ensureDay(); const list = day.bp || []; const b = list[list.length - 1]; if (!b) return;
+    const a = assessBP(b.sys, b.dia);
+    $('bpVal').innerHTML = `${b.sys}/${b.dia}`; $('bpVal').className = 'value ' + lvlClass(a);
+    $('bpNote').textContent = `${a.title.includes('(') ? a.title.split('(')[1].replace(')', '') : a.level === 'ok' ? 'normal' : 'high'} · ${b.src === 'cuff' ? 'arm cuff' : 'watch estimate'}`;
+  }
+
+  // ---------- CPAP (ResMed SD card STR.edf, or manual entry) ----------
+  let cpap = store.get('hd.cpap', {}); // { 'YYYY-MM-DD': { hours, ahi, leak, press, ai, hi, cai, oai, src } }
+  function parseEDF(buf) {
+    const b = new Uint8Array(buf), txt = (o, n) => String.fromCharCode(...b.subarray(o, o + n)).trim();
+    const hdrBytes = parseInt(txt(184, 8)), nRec = parseInt(txt(236, 8)), recDur = parseFloat(txt(244, 8)), ns = parseInt(txt(252, 4));
+    const [dd, mm, yy] = txt(168, 8).split('.').map(Number);
+    const start = new Date(2000 + yy - (yy > 84 ? 100 : 0), mm - 1, dd);
+    const sig = []; let o = 256;
+    const field = (len) => { const out = []; for (let i = 0; i < ns; i++) { out.push(txt(o, len)); o += len; } return out; };
+    const labels = field(16), _tr = field(80), dims = field(8), pmin = field(8).map(Number), pmax = field(8).map(Number),
+      dmin = field(8).map(Number), dmax = field(8).map(Number), _pf = field(80), spr = field(8).map(Number);
+    for (let i = 0; i < ns; i++) sig.push({ label: labels[i], dim: dims[i], spr: spr[i], gain: (pmax[i] - pmin[i]) / ((dmax[i] - dmin[i]) || 1), off: pmin[i] - dmin[i] * (pmax[i] - pmin[i]) / ((dmax[i] - dmin[i]) || 1) });
+    const dv = new DataView(buf); const recSize = spr.reduce((a, c) => a + c, 0) * 2;
+    const records = [];
+    for (let r = 0; r < nRec; r++) {
+      let p = hdrBytes + r * recSize; const rec = {};
+      for (const sg of sig) {
+        const vals = []; for (let k = 0; k < sg.spr; k++, p += 2) { if (p + 2 > buf.byteLength) break; vals.push(dv.getInt16(p, true) * sg.gain + sg.off); }
+        rec[sg.label] = vals;
+      }
+      records.push(rec);
+    }
+    return { start, recDur, signals: sig, records };
+  }
+  function importSTR(edf) {
+    const norm = l => l.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const find = (...names) => edf.signals.find(sg => names.includes(norm(sg.label)));
+    const sDur = find('duration'), sOn = find('onduration'), sAhi = find('ahi'), sAi = find('ai'), sHi = find('hi'),
+      sCai = find('cai'), sOai = find('oai'), sLeak = find('leak95'), sPress = find('maskpress95', 'tgtipap95', 'tgtepap95', 'blowpress95');
+    if (!sDur && !sAhi) throw new Error('This doesn\'t look like a ResMed STR.edf file (no usage or AHI data found).');
+    let added = 0;
+    edf.records.forEach((rec, i) => {
+      const val = sg => sg && rec[sg.label] && rec[sg.label].length ? rec[sg.label][0] : null;
+      const mins = val(sOn) ?? val(sDur);
+      if (mins == null || mins <= 0) return; // machine not used that night
+      const d = new Date(edf.start.getTime() + i * 86400000);
+      const key = todayStr(d.getTime());
+      let leak = val(sLeak);
+      if (leak != null && sLeak.dim.toLowerCase().includes('/s')) leak *= 60;
+      const r1 = v => v == null ? null : Math.round(v * 10) / 10;
+      cpap[key] = { hours: r1(mins / 60), ahi: r1(val(sAhi)), ai: r1(val(sAi)), hi: r1(val(sHi)), cai: r1(val(sCai)), oai: r1(val(sOai)), leak: r1(leak), press: r1(val(sPress)), src: 'sd' };
+      added++;
+    });
+    store.set('hd.cpap', cpap);
+    return added;
+  }
+  $('cpapFile').onchange = async e => {
+    for (const f of e.target.files) {
+      try {
+        if (!/^str\.edf$/i.test(f.name)) { showBanner({ level: 'caution', title: `Skipped ${f.name}`, detail: 'Pick the file named STR.edf from the main folder of the SD card.' }); continue; }
+        const n = importSTR(parseEDF(await f.arrayBuffer()));
+        log(`CPAP: imported ${n} nights from ${f.name}`);
+        showBanner({ level: 'ok', title: `Imported ${n} nights of CPAP data`, detail: 'Your sleep therapy summary is updated below.' });
+        evaluateCpap();
+      } catch (err) {
+        log('CPAP import failed: ' + err.message);
+        showBanner({ level: 'caution', title: 'Could not read that file', detail: err.message });
+      }
+    }
+    e.target.value = ''; renderCpap(); renderTips(); renderHistory();
+  };
+  $('cpapManualBtn').onclick = () => { $('cpapManual').hidden = false; const y = new Date(now() - 86400000); $('cDate').value = todayStr(y.getTime()); };
+  $('cCancel').onclick = () => { $('cpapManual').hidden = true; };
+  $('cSave').onclick = () => {
+    const h = parseFloat($('cHours').value), a = parseFloat($('cAhi').value), l = parseFloat($('cLeak').value);
+    if (!(h >= 0) || !$('cDate').value) return;
+    cpap[$('cDate').value] = { hours: h, ahi: isNaN(a) ? null : a, leak: isNaN(l) ? null : l, src: 'manual' };
+    store.set('hd.cpap', cpap); $('cpapManual').hidden = true;
+    for (const id of ['cHours', 'cAhi', 'cLeak']) $(id).value = '';
+    evaluateCpap(); renderCpap(); renderTips(); renderHistory();
+  };
+  function cpapStats() {
+    const keys = Object.keys(cpap).sort(); if (!keys.length) return null;
+    const lastKey = keys[keys.length - 1], last = cpap[lastKey];
+    const cutoff = todayStr(now() - 30 * 86400000);
+    const days30 = []; for (let i = 30; i >= 1; i--) days30.push(todayStr(now() - i * 86400000));
+    const used = days30.map(k => cpap[k]).filter(Boolean);
+    const nights4 = days30.filter(k => cpap[k] && cpap[k].hours >= 4).length;
+    const anyData = keys.some(k => k >= cutoff);
+    return { lastKey, last, days30, used, comp: anyData ? Math.round(nights4 / 30 * 100) : null,
+      avgH: used.length ? used.reduce((a, c) => a + c.hours, 0) / used.length : null };
+  }
+  function assessCpap(n) {
+    const out = [];
+    if (n.hours < 4) out.push({ level: 'caution', title: `CPAP used ${n.hours} h`, detail: 'Under 4 hours. Research shows benefits for daytime sleepiness and blood pressure grow with more hours of use — aim for all night, at least 4 hours on 70% of nights.', watch: `CPAP only ${n.hours}h last night. Aim for 4h+.` });
+    if (n.ahi != null) {
+      if (n.ahi >= 15) out.push({ level: 'alert', title: `CPAP AHI ${n.ahi} events/hour`, detail: 'Your therapy is leaving 15+ breathing events per hour. Contact your sleep doctor or equipment supplier — pressure settings or mask may need adjusting.', watch: `CPAP AHI ${n.ahi}/hr high. Contact sleep doctor.` });
+      else if (n.ahi >= 5) out.push({ level: 'caution', title: `CPAP AHI ${n.ahi} events/hour`, detail: 'Treatment goal is under 5 events per hour. If it stays at 5 or above for a week or more, let your sleep doctor know.', watch: `CPAP AHI ${n.ahi}/hr above goal of 5.` });
+    }
+    if (n.leak != null && n.leak > 24) out.push({ level: 'caution', title: `High mask leak (${n.leak} L/min)`, detail: 'ResMed considers a 95th-percentile leak above 24 L/min large. Re-fit the mask, check the cushion for wear, and try a different size if it keeps happening.', watch: 'CPAP mask leak high. Check mask fit.' });
+    return out;
+  }
+  function evaluateCpap() {
+    const st = cpapStats(); if (!st) return;
+    if (st.lastKey < todayStr(now() - 2 * 86400000)) return; // only alert on recent nights
+    for (const a of assessCpap(st.last)) raise('cpap-' + a.title.split(' ')[1], a, 12 * 60);
+  }
+  function renderCpap() {
+    const st = cpapStats();
+    if (!st) { drawCpapChart(null); return; }
+    const n = st.last, dname = new Date(dateMs(st.lastKey)).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    const issues = assessCpap(n);
+    const worst = issues.reduce((w, a) => ORDER[a.level] > ORDER[w] ? a.level : w, 'ok');
+    $('cpapVal').innerHTML = `${n.hours}<small> h</small>`; $('cpapVal').className = 'value lvl-' + worst;
+    $('cpapNote').textContent = `${n.ahi != null ? 'AHI ' + n.ahi + ' · ' : ''}${dname}`;
+    $('cpapSub').textContent = `Latest: ${dname}`;
+    $('cpapAhi').textContent = n.ahi ?? '–';
+    $('cpapAhi').className = n.ahi == null ? '' : n.ahi >= 15 ? 'lvl-alert' : n.ahi >= 5 ? 'lvl-caution' : 'lvl-ok';
+    $('cpapComp').textContent = st.comp == null ? '–' : st.comp + '%';
+    $('cpapComp').className = st.comp == null ? '' : st.comp >= 70 ? 'lvl-ok' : 'lvl-caution';
+    $('cpapAvg').textContent = st.avgH == null ? '–' : st.avgH.toFixed(1);
+    $('cpapDetail').innerHTML = '';
+    const rows = issues.length ? issues : [{ level: 'ok', title: 'Last night looks good', detail: `${n.hours} h of use${n.ahi != null ? `, ${n.ahi} events/hour (goal under 5)` : ''}${n.leak != null ? `, leak ${n.leak} L/min` : ''}${n.press != null ? `, pressure ${n.press} cmH₂O (95th pct)` : ''}.` }];
+    renderInto($('cpapDetail'), rows);
+    drawCpapChart(st);
+  }
+  function renderInto(el, list) {
+    for (const r of list) {
+      const d = document.createElement('div'); d.className = 'result';
+      const label = { ok: 'OK', caution: 'CHECK', alert: 'WARN', urgent: 'URGENT', na: 'N/A' }[r.level];
+      d.innerHTML = `<span class="badge ${r.level}">${label}</span><div><b></b><div class="muted"></div></div>`;
+      d.querySelector('b').textContent = r.title; d.querySelector('.muted').textContent = r.detail;
+      el.appendChild(d);
+    }
+  }
+  function drawCpapChart(st) {
+    const cv = $('cpapChart'), dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+    const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    g.font = '11px system-ui, sans-serif'; g.fillStyle = css('--muted');
+    if (!st) { g.fillText('Your last 30 nights will appear here.', 8, H / 2); $('cpapLegend').textContent = ''; return; }
+    const padL = 24, padR = 26, padT = 8, padB = 18, cw = (W - padL - padR) / 30;
+    const yH = h => padT + (H - padT - padB) * (1 - Math.min(h, 10) / 10);
+    const maxA = Math.max(10, ...st.used.map(n => n.ahi || 0));
+    const yA = a => padT + (H - padT - padB) * (1 - a / maxA);
+    g.strokeStyle = css('--grid'); g.lineWidth = 1;
+    for (const h of [0, 4, 8]) { g.beginPath(); g.moveTo(padL, yH(h)); g.lineTo(W - padR, yH(h)); g.stroke(); g.fillText(h + 'h', 2, yH(h) + 4); }
+    g.fillText(Math.round(maxA), W - padR + 4, padT + 8); g.fillText('AHI', W - padR + 2, yA(0) + 4);
+    st.days30.forEach((k, i) => {
+      const n = cpap[k]; if (!n) return;
+      g.fillStyle = n.hours >= 4 ? css('--chart-line') : css('--caution');
+      g.globalAlpha = .75; g.fillRect(padL + i * cw + 1, yH(n.hours), Math.max(2, cw - 2), yH(0) - yH(n.hours)); g.globalAlpha = 1;
+    });
+    g.strokeStyle = css('--urgent'); g.lineWidth = 2; g.beginPath(); let started = false;
+    st.days30.forEach((k, i) => { const n = cpap[k]; if (!n || n.ahi == null) return; const X = padL + i * cw + cw / 2, Y = yA(n.ahi); started ? g.lineTo(X, Y) : g.moveTo(X, Y); started = true; });
+    g.stroke();
+    g.fillStyle = css('--muted');
+    g.fillText(new Date(dateMs(st.days30[0])).toLocaleDateString([], { month: 'short', day: 'numeric' }), padL, H - 4);
+    const e = 'last night'; g.fillText(e, W - padR - g.measureText(e).width, H - 4);
+    $('cpapLegend').textContent = 'Bars: hours used (orange = under 4 h) · Red line: AHI (events/hour)';
+  }
+
+  // ---------- 7-day history table ----------
+  function renderHistory() {
+    const rows = [];
+    for (let i = 0; i < 7; i++) {
+      const t = now() - i * 86400000;
+      const rec = i === 0 ? ensureDay() : store.get(dayKey(t), null) || {};
+      const mins = Object.values(rec.hr || {}).map(b => b[0] / b[1]).sort((a, c) => a - c);
+      const rests = (rec.checks || []).filter(c => c.resting && c.hr).map(c => c.hr);
+      const rest = rests.length ? Math.min(...rests) : mins.length >= 12 ? Math.round(mins[Math.floor(mins.length * 0.1)]) : null;
+      const sp = (rec.spo2 || []).map(x => x.v);
+      const bp = (rec.bp || [])[(rec.bp || []).length - 1];
+      const w = weights.find(x => x.d === todayStr(t));
+      const night = cpap[todayStr(t - 86400000)];
+      rows.push({ label: i === 0 ? 'Today' : new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric' }),
+        steps: rec.steps?.steps, rest, spo2: sp.length ? Math.min(...sp) : null, bp, w: w?.lb, cpap: night });
+    }
+    const td = (v, cls = '') => `<td class="${cls}">${v ?? '–'}</td>`;
+    let h = '<tr><th>Day</th><th>Steps</th><th>Rest HR</th><th>SpO2 low</th><th>BP</th><th>CPAP</th><th>Weight</th></tr>';
+    for (const r of rows) {
+      const rc = r.rest == null ? '' : lvlClass(assessRestingHR(r.rest));
+      const sc = r.spo2 == null ? '' : lvlClass(assessSpo2(r.spo2));
+      const bc = r.bp ? lvlClass(assessBP(r.bp.sys, r.bp.dia)) : '';
+      const cc = r.cpap ? (r.cpap.hours < 4 || (r.cpap.ahi ?? 0) >= 5 ? 'lvl-caution' : 'lvl-ok') : '';
+      h += `<tr><td>${r.label}</td>${td(r.steps != null ? r.steps.toLocaleString() : null)}${td(r.rest, rc)}${td(r.spo2 != null ? r.spo2 + '%' : null, sc)}${td(r.bp ? r.bp.sys + '/' + r.bp.dia : null, bc)}${td(r.cpap ? r.cpap.hours + 'h' : null, cc)}${td(r.w != null ? r.w.toFixed(1) : null)}</tr>`;
+    }
+    $('histTable').innerHTML = h;
   }
 
   // ---------- Weight tracker ----------
@@ -1023,9 +1394,9 @@
     $('statMax').textContent = n ? hi : '–';
     $('chartLegend').textContent = 'Shaded: normal resting range';
   }
-  window.addEventListener('resize', () => { scheduleChart(); renderWeight(); });
+  window.addEventListener('resize', () => { scheduleChart(); renderWeight(); renderCpap(); });
 
-  function renderAll() { renderWeight(); renderHR(); renderSpo2(); renderStress(); renderSteps(); renderRest(); renderTips(); renderAlerts(); renderChart(); }
+  function renderAll() { renderWeight(); renderBP(); renderCpap(); renderHistory(); renderHR(); renderSpo2(); renderStress(); renderSteps(); renderRest(); renderTips(); renderAlerts(); renderChart(); }
 
   // ---------- Screen wake lock ----------
   let wakeLock = null;
