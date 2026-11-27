@@ -32,7 +32,16 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 16px 16px 40px; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px 16px calc(84px + env(safe-area-inset-bottom)); }
+  .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; justify-content: center;
+    background: var(--card); border-top: 1px solid var(--line); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); }
+  .tabbar button { flex: 1; max-width: 108px; border: 0; background: none; border-radius: 10px; padding: 6px 0 5px;
+    font-size: 11px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+  .tabbar button span { font-size: 19px; line-height: 1; filter: grayscale(1); opacity: .7; }
+  .tabbar button.on { color: var(--accent); font-weight: 600; background: var(--soft); }
+  .tabbar button.on span { filter: none; opacity: 1; }
+  .tile[data-goto] { cursor: pointer; }
+  #connPill { cursor: pointer; }
   header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
   h1 { font-size: 21px; margin: 0; }
   h2 { font-size: 16px; margin: 0 0 10px; }
@@ -59,6 +68,7 @@
   .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
   .banner { border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
   .banner b { display: block; margin-bottom: 2px; }
+  .banner span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .banner.ok { background: var(--ok-bg); } .banner.caution { background: var(--caution-bg); }
   .banner.alert { background: var(--alert-bg); } .banner.urgent { background: var(--urgent-bg); }
   .banner .t { font-size: 12px; color: var(--muted); }
@@ -100,41 +110,49 @@
 <body>
 <main>
   <header>
-    <h1>Health Dashboard</h1>
+    <h1>Health Profiler</h1>
     <div class="row">
-      <span class="pill"><span class="dot" id="connDot"></span><span id="connText">Not connected</span></span>
+      <span class="pill" id="connPill" role="button" tabindex="0" title="Watch settings"><span class="dot" id="connDot"></span><span id="connText">Not connected</span></span>
       <span class="pill" id="battPill" hidden>🔋 <span id="battText">–</span></span>
+      <button class="primary sm" id="connectBtn">Connect</button>
+      <button class="sm" id="reconnectBtn" hidden>Reconnect</button>
     </div>
   </header>
-
-  <div class="card" id="connectCard">
-    <div class="row">
-      <button class="primary" id="connectBtn">Connect watch</button>
-      <button id="reconnectBtn" hidden>Reconnect saved watch</button>
-      <button id="disconnectBtn" hidden>Disconnect</button>
-      <button id="wakeBtn" class="sm">Keep screen on</button>
-    </div>
-    <div id="support" class="muted" style="margin-top:8px"></div>
-  </div>
+  <div id="support" class="muted" style="margin:-4px 0 10px"></div>
 
   <div id="banners"></div>
 
+  <section class="tab" id="tab-today" hidden>
   <div class="card" id="setupCard" hidden>
     <h2>Set up your profile</h2>
     <p class="muted" style="margin-top:0">Your ranges and advice are based on these. They're saved only on this phone, never uploaded.</p>
+    <button class="primary sm" data-goto="settings">Open settings</button>
   </div>
 
   <section class="tiles" style="margin-bottom:12px">
     <div class="tile"><div class="label">Heart rate</div><div class="value" id="hrVal">–<small> bpm</small></div><div class="note" id="hrNote">Waiting for data</div></div>
-    <div class="tile"><div class="label">Blood oxygen</div><div class="value" id="spo2Val">–<small> %</small></div><div class="note" id="spo2Note">Run a health check</div></div>
-    <div class="tile"><div class="label">Stress (est.)</div><div class="value" id="stressVal">–<small> /100</small></div><div class="note" id="stressNote">Needs a resting reading</div></div>
+    <div class="tile" data-goto="check"><div class="label">Blood oxygen</div><div class="value" id="spo2Val">–<small> %</small></div><div class="note" id="spo2Note">Run a health check</div></div>
+    <div class="tile" data-goto="check"><div class="label">Stress (est.)</div><div class="value" id="stressVal">–<small> /100</small></div><div class="note" id="stressNote">Needs a resting reading</div></div>
     <div class="tile"><div class="label">Steps</div><div class="value" id="stepsVal">–</div><div class="bar"><i id="stepsBar"></i></div><div class="note" id="stepsNote">Goal –</div></div>
     <div class="tile"><div class="label">Distance</div><div class="value" id="distVal">–<small> mi</small></div><div class="note" id="kcalNote">– kcal</div></div>
-    <div class="tile"><div class="label">Resting HR today</div><div class="value" id="restVal">–<small> bpm</small></div><div class="note" id="restNote">Lowest resting check</div></div>
-    <div class="tile"><div class="label">Blood pressure</div><div class="value" id="bpVal">–<small> mmHg</small></div><div class="note" id="bpNote">Reference only</div></div>
-    <div class="tile"><div class="label">CPAP last night</div><div class="value" id="cpapVal">–<small> h</small></div><div class="note" id="cpapNote">Import or enter data</div></div>
+    <div class="tile" data-goto="trends"><div class="label">Resting HR today</div><div class="value" id="restVal">–<small> bpm</small></div><div class="note" id="restNote">Lowest resting check</div></div>
+    <div class="tile" data-goto="check"><div class="label">Blood pressure</div><div class="value" id="bpVal">–<small> mmHg</small></div><div class="note" id="bpNote">Reference only</div></div>
+    <div class="tile" data-goto="sleep"><div class="label">CPAP last night</div><div class="value" id="cpapVal">–<small> h</small></div><div class="note" id="cpapNote">Import or enter data</div></div>
+    <div class="tile" data-goto="weight"><div class="label">Weight</div><div class="value" id="wTile">–<small> lb</small></div><div class="note" id="wTileNote">Log on the Weight tab</div></div>
   </section>
 
+  <div class="card" id="hrCard">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Today's heart rate</h2><span class="muted" id="chartLegend"></span></div>
+    <canvas id="chart" aria-label="Heart rate chart for today"></canvas>
+    <div class="stats">
+      <div><b id="statAvg">–</b><span>Average</span></div>
+      <div><b id="statMin">–</b><span>Lowest</span></div>
+      <div><b id="statMax">–</b><span>Highest</span></div>
+    </div>
+  </div>
+  </section>
+
+  <section class="tab" id="tab-check" hidden>
   <div class="card">
     <h2>Health check</h2>
     <p class="muted" style="margin-top:0">Measures heart rate (45 s) and blood oxygen, then estimates stress. Sit still with the watch snug on your wrist.</p>
@@ -147,17 +165,9 @@
     <div id="progress" class="muted"></div>
     <div id="results" style="margin-top:6px"></div>
   </div>
+  </section>
 
-  <div class="card">
-    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Today's heart rate</h2><span class="muted" id="chartLegend"></span></div>
-    <canvas id="chart" aria-label="Heart rate chart for today"></canvas>
-    <div class="stats">
-      <div><b id="statAvg">–</b><span>Average</span></div>
-      <div><b id="statMin">–</b><span>Lowest</span></div>
-      <div><b id="statMax">–</b><span>Highest</span></div>
-    </div>
-  </div>
-
+  <section class="tab" id="tab-sleep" hidden>
   <div class="card" id="cpapCard">
     <div class="row" style="justify-content:space-between"><h2 style="margin:0">Sleep therapy (CPAP)</h2><span class="muted" id="cpapSub"></span></div>
     <p class="muted" style="margin:6px 0 10px">ResMed machines save detailed nightly data to their SD card. Put the card in your phone (USB-C card reader) and pick the file <b>STR.edf</b> from the card's main folder. Or type in last night's numbers from the myAir app.</p>
@@ -183,24 +193,9 @@
     <div class="muted" id="cpapLegend" style="font-size:12px"></div>
     <div id="cpapDetail" style="margin-top:8px"></div>
   </div>
+  </section>
 
-  <div class="card">
-    <h2>Last 7 days</h2>
-    <div style="overflow-x:auto"><table id="histTable" style="width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums"></table></div>
-    <div class="muted" style="margin-top:6px;font-size:12px">Steps and heart rate from earlier days come from the watch's own memory when you connect (it keeps about 2 days).</div>
-  </div>
-
-  <div class="card">
-    <h2>Watch</h2>
-    <div class="row">
-      <button class="sm" id="syncBtn" disabled>Sync now</button>
-      <button class="sm" id="findBtn" disabled>Find my watch</button>
-    </div>
-    <label class="check" style="margin-top:10px"><input type="checkbox" id="wAutoHR"> Watch measures heart rate by itself every 10 min (fills gaps when this page is closed)</label>
-    <label class="check"><input type="checkbox" id="wSedentary"> Watch vibrates after 1 hour of sitting (8am–9pm)</label>
-    <div class="muted" id="watchInfo" style="margin-top:6px">On every connect the dashboard sets the watch's clock, sends your height/weight/age and step goal, and downloads its stored history.</div>
-  </div>
-
+  <section class="tab" id="tab-weight" hidden>
   <div class="card" id="weightCard">
     <div class="row" style="justify-content:space-between"><h2 style="margin:0">Weight</h2><span class="muted" id="wSub"></span></div>
     <div class="row" style="margin-top:10px">
@@ -222,21 +217,33 @@
     <div id="wNoteBox" class="muted" style="margin-top:6px"></div>
     <details style="margin-top:8px"><summary>All entries</summary><div id="wList" style="margin-top:6px"></div></details>
   </div>
+  </section>
 
+  <section class="tab" id="tab-trends" hidden>
   <div class="card">
-    <h2>Suggestions for you</h2>
-    <div id="tips"><div class="muted">Fill in your profile to get personalised suggestions.</div></div>
+    <h2>Last 7 days</h2>
+    <div style="overflow-x:auto"><table id="histTable" style="width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums"></table></div>
+    <div class="muted" style="margin-top:6px;font-size:12px">Steps and heart rate from earlier days come from the watch's own memory when you connect (it keeps about 2 days).</div>
   </div>
 
   <div class="card">
     <h2>Alerts today</h2>
     <div id="alertList" class="muted">No alerts yet.</div>
   </div>
+  </section>
 
+  <section class="tab" id="tab-tips" hidden>
   <div class="card">
-    <details id="profileDetails">
-      <summary>Profile &amp; settings</summary>
-      <div style="margin-top:12px" class="grid2">
+    <h2>Suggestions for you</h2>
+    <div id="tips"><div class="muted">Fill in your profile to get personalised suggestions.</div></div>
+  </div>
+  </section>
+
+  <section class="tab" id="tab-settings" hidden>
+  <div class="card">
+    <div id="profileDetails">
+      <h2>Profile &amp; settings</h2>
+      <div class="grid2">
         <div><label>Age<input type="number" id="pAge" min="10" max="110" inputmode="numeric"></label></div>
         <div><label>Weight (lb)<input type="number" id="pWeight" min="50" max="700" inputmode="decimal"></label></div>
         <div><label>Height (ft)<input type="number" id="pFt" min="3" max="8" inputmode="numeric"></label></div>
@@ -258,7 +265,20 @@
         <button class="sm" id="testWatch">Test watch message</button>
         <button class="sm" id="testPhone">Test phone notification</button>
       </div>
-    </details>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Watch</h2>
+    <div class="row">
+      <button class="sm" id="disconnectBtn" hidden>Disconnect</button>
+      <button class="sm" id="wakeBtn">Keep screen on</button>
+      <button class="sm" id="syncBtn" disabled>Sync now</button>
+      <button class="sm" id="findBtn" disabled>Find my watch</button>
+    </div>
+    <label class="check" style="margin-top:10px"><input type="checkbox" id="wAutoHR"> Watch measures heart rate by itself every 10 min (fills gaps when this page is closed)</label>
+    <label class="check"><input type="checkbox" id="wSedentary"> Watch vibrates after 1 hour of sitting (8am–9pm)</label>
+    <div class="muted" id="watchInfo" style="margin-top:6px">On every connect the dashboard sets the watch's clock, sends your height/weight/age and step goal, and downloads its stored history.</div>
   </div>
 
   <div class="card">
@@ -270,7 +290,17 @@
   </div>
 
   <p class="disclaimer">This dashboard is for general wellness only. It is not a medical device, and wrist sensors (especially blood oxygen) can be inaccurate. Ranges follow published guidance (American Heart Association, CDC, US Physical Activity Guidelines) but are not a diagnosis. <b>If you have chest pain, trouble breathing, fainting, or sudden weakness, call 911.</b> Talk to your doctor before starting a new exercise plan.</p>
+  </section>
 </main>
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="today"><span>📊</span>Today</button>
+    <button data-tab="check"><span>🩺</span>Check</button>
+    <button data-tab="sleep"><span>😴</span>Sleep</button>
+    <button data-tab="weight"><span>⚖️</span>Weight</button>
+    <button data-tab="trends"><span>📈</span>Trends</button>
+    <button data-tab="tips"><span>💡</span>Tips</button>
+    <button data-tab="settings"><span>⚙️</span>Settings</button>
+  </nav>
 
 <script>
 (() => {
@@ -476,10 +506,13 @@
     el.className = `banner ${a.level}`;
     el.innerHTML = `<b></b><span></span><div class="t"></div>`;
     el.querySelector('b').textContent = a.title; el.querySelector('span').textContent = a.detail;
-    el.querySelector('.t').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · tap to dismiss';
+    el.querySelector('.t').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · tap to dismiss · all alerts under Trends';
     el.onclick = () => el.remove();
     $('banners').prepend(el);
-    while ($('banners').children.length > 3) $('banners').lastChild.remove();
+    while ($('banners').children.length > 1) $('banners').lastChild.remove();
+    // Keep the screen tidy: info/caution banners fade out on their own (all alerts stay listed under Trends).
+    const ms = { ok: 8000, caution: 30000 }[a.level];
+    if (ms) setTimeout(() => el.remove(), ms);
   }
   let swReg = null;
   async function initSW() {
@@ -585,7 +618,7 @@
       const id = store.get('hd.deviceId', null);
       const devs = await navigator.bluetooth.getDevices();
       const d = devs.find(x => x.id === id) || devs[0];
-      if (d) { $('reconnectBtn').hidden = false; $('reconnectBtn').textContent = `Reconnect ${d.name || 'watch'}`; $('reconnectBtn').onclick = () => { $('reconnectBtn').hidden = true; connect(d); }; }
+      if (d) { $('reconnectBtn').hidden = false; $('reconnectBtn').onclick = () => { $('reconnectBtn').hidden = true; connect(d); }; }
     } catch {}
   })();
 
@@ -1103,7 +1136,7 @@
         if (!/^str\.edf$/i.test(f.name)) { showBanner({ level: 'caution', title: `Skipped ${f.name}`, detail: 'Pick the file named STR.edf from the main folder of the SD card.' }); continue; }
         const n = importSTR(parseEDF(await f.arrayBuffer()));
         log(`CPAP: imported ${n} nights from ${f.name}`);
-        showBanner({ level: 'ok', title: `Imported ${n} nights of CPAP data`, detail: 'Your sleep therapy summary is updated below.' });
+        showBanner({ level: 'ok', title: `Imported ${n} nights of CPAP data`, detail: 'Your sleep therapy summary is updated.' });
         evaluateCpap();
       } catch (err) {
         log('CPAP import failed: ' + err.message);
@@ -1286,6 +1319,8 @@
     const d = derived();
     $('wSub').textContent = d ? `BMI ${d.bmi.toFixed(1)}` : '';
     $('wNow').textContent = st.cur.lb.toFixed(1);
+    $('wTile').innerHTML = `${st.cur.lb.toFixed(1)}<small> lb</small>`;
+    $('wTileNote').textContent = weights.length > 1 ? `${st.cur.lb - st.start.lb > 0 ? '+' : ''}${(st.cur.lb - st.start.lb).toFixed(1)} lb since start` : `Goal ${st.goal.toFixed(0)} lb`;
     $('wChange').textContent = weights.length > 1 ? fmt(st.cur.lb - st.start.lb) : '–';
     $('wChange').className = st.cur.lb < st.start.lb ? 'lvl-ok' : st.cur.lb > st.start.lb ? 'lvl-caution' : '';
     $('wRate').textContent = st.rate == null ? '–' : fmt(st.rate);
@@ -1412,7 +1447,23 @@
 
   // ---------- Start ----------
   ensureDay(); loadProfileForm(); renderAll(); initSW();
-  if (!hasProfile()) { $('profileDetails').open = true; }
+  // ---------- Tabs ----------
+  const TABS = ['today', 'check', 'sleep', 'weight', 'trends', 'tips', 'settings'];
+  function showTab(name) {
+    if (!TABS.includes(name)) name = 'today';
+    for (const t of TABS) $('tab-' + t).hidden = t !== name;
+    document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+    store.set('hd.tab', name);
+    window.scrollTo(0, 0);
+    // Charts can only measure their size once visible.
+    if (name === 'today') renderChart();
+    if (name === 'sleep') renderCpap();
+    if (name === 'weight') renderWeight();
+  }
+  document.querySelectorAll('#tabbar button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g && !e.target.closest('#tabbar')) showTab(g.dataset.goto); });
+  $('connPill').onclick = () => showTab('settings');
+  showTab(hasProfile() ? store.get('hd.tab', 'today') : 'settings');
   setInterval(() => { if (dayKey() !== dayK) { saveDay(); ensureDay(); renderAll(); } }, MIN);
   window.addEventListener('pagehide', () => saveDay());
   // Exposed for testing only.
