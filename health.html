@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1115">
+<title>Health Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #15171c; --muted: #667085; --line: #e3e6eb;
+    --accent: #2563eb; --accent-text: #fff; --soft: #f0f2f5;
+    --ok: #15803d; --ok-bg: #e8f6ee; --caution: #b45309; --caution-bg: #fdf3e2;
+    --alert: #c2410c; --alert-bg: #fdece4; --urgent: #b91c1c; --urgent-bg: #fde8e8;
+    --chart-line: #2563eb; --band: rgba(21,128,61,.10); --grid: #e7e9ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --card: #171a20; --text: #e8eaef; --muted: #9aa2b1; --line: #2a2f39;
+      --accent: #6b97ff; --accent-text: #0b0d12; --soft: #1e222a;
+      --ok: #4ade80; --ok-bg: #12261b; --caution: #fbbf24; --caution-bg: #2a2212;
+      --alert: #fb923c; --alert-bg: #2b1a12; --urgent: #f87171; --urgent-bg: #2c1515;
+      --chart-line: #7aa2ff; --band: rgba(74,222,128,.10); --grid: #252a33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1115; --card: #171a20; --text: #e8eaef; --muted: #9aa2b1; --line: #2a2f39;
+    --accent: #6b97ff; --accent-text: #0b0d12; --soft: #1e222a;
+    --ok: #4ade80; --ok-bg: #12261b; --caution: #fbbf24; --caution-bg: #2a2212;
+    --alert: #fb923c; --alert-bg: #2b1a12; --urgent: #f87171; --urgent-bg: #2c1515;
+    --chart-line: #7aa2ff; --band: rgba(74,222,128,.10); --grid: #252a33;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px 16px 40px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  h1 { font-size: 21px; margin: 0; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 10px; padding: 9px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.sm { padding: 6px 10px; font-size: 13px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 10px; border-radius: 99px; background: var(--soft); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--urgent); }
+  .dot.on { background: var(--ok); }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (min-width: 620px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .tile .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .tile .value { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 2px; }
+  .tile .value small { font-size: 14px; font-weight: 500; color: var(--muted); }
+  .tile .note { font-size: 12.5px; margin-top: 4px; color: var(--muted); }
+  .lvl-ok { color: var(--ok); } .lvl-caution { color: var(--caution); } .lvl-alert { color: var(--alert); } .lvl-urgent { color: var(--urgent); }
+  .bar { height: 6px; background: var(--soft); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
+  .banner { border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; }
+  .banner b { display: block; margin-bottom: 2px; }
+  .banner.ok { background: var(--ok-bg); } .banner.caution { background: var(--caution-bg); }
+  .banner.alert { background: var(--alert-bg); } .banner.urgent { background: var(--urgent-bg); }
+  .banner .t { font-size: 12px; color: var(--muted); }
+  .result { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .result:first-child { border-top: 0; }
+  .result .badge { flex: none; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 99px; height: fit-content; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); } .badge.caution { background: var(--caution-bg); color: var(--caution); }
+  .badge.alert { background: var(--alert-bg); color: var(--alert); } .badge.urgent { background: var(--urgent-bg); color: var(--urgent); }
+  .badge.na { background: var(--soft); color: var(--muted); }
+  .tip { padding: 10px 0; border-top: 1px solid var(--line); }
+  .tip:first-child { border-top: 0; }
+  .tip .src { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label { font-size: 13px; color: var(--muted); display: block; }
+  input[type=number], select { width: 100%; font: inherit; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); margin-top: 3px; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--text); margin: 6px 0; }
+  canvas { width: 100%; height: 180px; display: block; }
+  #progress { font-size: 14px; margin-top: 8px; min-height: 20px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  #log { font: 12px ui-monospace, Menlo, Consolas, monospace; max-height: 260px; overflow: auto; background: var(--soft);
+    border-radius: 8px; padding: 8px; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .stats div { background: var(--soft); border-radius: 10px; padding: 8px; text-align: center; }
+  .stats b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .stats span { font-size: 11.5px; color: var(--muted); }
+  #wChart { height: 170px; }
+  .wrow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .wrow:first-child { border-top: 0; }
+  .wrow button { padding: 2px 8px; font-size: 12px; }
+  .goalbar { position: relative; height: 10px; background: var(--soft); border-radius: 99px; margin: 8px 0 4px; overflow: hidden; }
+  .goalbar > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); border-radius: 99px; }
+  .disclaimer { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Health Dashboard</h1>
+    <div class="row">
+      <span class="pill"><span class="dot" id="connDot"></span><span id="connText">Not connected</span></span>
+      <span class="pill" id="battPill" hidden>🔋 <span id="battText">–</span></span>
+    </div>
+  </header>
+
+  <div class="card" id="connectCard">
+    <div class="row">
+      <button class="primary" id="connectBtn">Connect watch</button>
+      <button id="reconnectBtn" hidden>Reconnect saved watch</button>
+      <button id="disconnectBtn" hidden>Disconnect</button>
+      <button id="wakeBtn" class="sm">Keep screen on</button>
+    </div>
+    <div id="support" class="muted" style="margin-top:8px"></div>
+  </div>
+
+  <div id="banners"></div>
+
+  <div class="card" id="setupCard" hidden>
+    <h2>Set up your profile</h2>
+    <p class="muted" style="margin-top:0">Your ranges and advice are based on these. They're saved only on this phone, never uploaded.</p>
+  </div>
+
+  <section class="tiles" style="margin-bottom:12px">
+    <div class="tile"><div class="label">Heart rate</div><div class="value" id="hrVal">–<small> bpm</small></div><div class="note" id="hrNote">Waiting for data</div></div>
+    <div class="tile"><div class="label">Blood oxygen</div><div class="value" id="spo2Val">–<small> %</small></div><div class="note" id="spo2Note">Run a health check</div></div>
+    <div class="tile"><div class="label">Stress (est.)</div><div class="value" id="stressVal">–<small> /100</small></div><div class="note" id="stressNote">Needs a resting reading</div></div>
+    <div class="tile"><div class="label">Steps</div><div class="value" id="stepsVal">–</div><div class="bar"><i id="stepsBar"></i></div><div class="note" id="stepsNote">Goal –</div></div>
+    <div class="tile"><div class="label">Distance</div><div class="value" id="distVal">–<small> mi</small></div><div class="note" id="kcalNote">– kcal</div></div>
+    <div class="tile"><div class="label">Resting HR today</div><div class="value" id="restVal">–<small> bpm</small></div><div class="note" id="restNote">Lowest resting check</div></div>
+  </section>
+
+  <div class="card">
+    <h2>Health check</h2>
+    <p class="muted" style="margin-top:0">Measures heart rate (45 s) and blood oxygen, then estimates stress. Sit still with the watch snug on your wrist.</p>
+    <div class="row">
+      <button class="primary" id="checkBtn" disabled>Run health check</button>
+      <button id="spo2ManualBtn" class="sm">Enter SpO2 from watch</button>
+    </div>
+    <div id="progress" class="muted"></div>
+    <div id="results" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Today's heart rate</h2><span class="muted" id="chartLegend"></span></div>
+    <canvas id="chart" aria-label="Heart rate chart for today"></canvas>
+    <div class="stats">
+      <div><b id="statAvg">–</b><span>Average</span></div>
+      <div><b id="statMin">–</b><span>Lowest</span></div>
+      <div><b id="statMax">–</b><span>Highest</span></div>
+    </div>
+  </div>
+
+  <div class="card" id="weightCard">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Weight</h2><span class="muted" id="wSub"></span></div>
+    <div class="row" style="margin-top:10px">
+      <input type="number" id="wInput" placeholder="Weight (lb)" min="50" max="700" step="0.1" inputmode="decimal" style="flex:1;min-width:140px;margin:0">
+      <input type="date" id="wDate" style="flex:none;width:auto;margin:0;font:inherit;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--text)">
+      <button class="primary" id="wAdd">Log</button>
+    </div>
+    <div class="stats" id="wStats">
+      <div><b id="wNow">–</b><span>Current (lb)</span></div>
+      <div><b id="wChange">–</b><span>Since start</span></div>
+      <div><b id="wRate">–</b><span>Per week (4 wk)</span></div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="row" style="justify-content:space-between;font-size:14px"><b id="wGoalTitle">Goal</b><span class="muted" id="wGoalPct"></span></div>
+      <div class="goalbar"><i id="wGoalBar" style="width:0"></i></div>
+      <div class="muted" id="wGoalNote"></div>
+    </div>
+    <canvas id="wChart" aria-label="Weight over time" style="margin-top:10px"></canvas>
+    <div id="wNoteBox" class="muted" style="margin-top:6px"></div>
+    <details style="margin-top:8px"><summary>All entries</summary><div id="wList" style="margin-top:6px"></div></details>
+  </div>
+
+  <div class="card">
+    <h2>Suggestions for you</h2>
+    <div id="tips"><div class="muted">Fill in your profile to get personalised suggestions.</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Alerts today</h2>
+    <div id="alertList" class="muted">No alerts yet.</div>
+  </div>
+
+  <div class="card">
+    <details id="profileDetails">
+      <summary>Profile &amp; settings</summary>
+      <div style="margin-top:12px" class="grid2">
+        <div><label>Age<input type="number" id="pAge" min="10" max="110" inputmode="numeric"></label></div>
+        <div><label>Weight (lb)<input type="number" id="pWeight" min="50" max="700" inputmode="decimal"></label></div>
+        <div><label>Height (ft)<input type="number" id="pFt" min="3" max="8" inputmode="numeric"></label></div>
+        <div><label>Height (in)<input type="number" id="pIn" min="0" max="11" inputmode="numeric"></label></div>
+        <div><label>Goal weight (lb, optional)<input type="number" id="pGoal" min="50" max="700" inputmode="decimal" placeholder="default: 7% loss"></label></div>
+        <div><label>Weekly weigh-in reminder<select id="pWRemind"><option value="1">On</option><option value="0">Off</option></select></label></div>
+        <div><label>Auto heart-rate check every<select id="pHrEvery">
+          <option value="0">Off</option><option value="10">10 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="60">60 min</option></select></label></div>
+        <div><label>Auto SpO2 check every<select id="pSpo2Every">
+          <option value="0">Off</option><option value="30">30 min</option><option value="60">60 min</option><option value="120">2 hours</option></select></label></div>
+      </div>
+      <label class="check"><input type="checkbox" id="pWatch"> Send warnings to the watch</label>
+      <label class="check"><input type="checkbox" id="pPhone"> Show phone notifications</label>
+      <label class="check"><input type="checkbox" id="pInactive"> Nudge me after 60 min without moving (8am–9pm)</label>
+      <div id="derived" class="muted" style="margin:8px 0"></div>
+      <div class="row">
+        <button class="primary sm" id="saveProfile">Save</button>
+        <button class="sm" id="testWatch">Test watch message</button>
+        <button class="sm" id="testPhone">Test phone notification</button>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Technical log</summary>
+      <div class="row" style="margin-top:8px"><button class="sm" id="copyLog">Copy log</button></div>
+      <div id="log"></div>
+    </details>
+  </div>
+
+  <p class="disclaimer">This dashboard is for general wellness only. It is not a medical device, and wrist sensors (especially blood oxygen) can be inaccurate. Ranges follow published guidance (American Heart Association, CDC, US Physical Activity Guidelines) but are not a diagnosis. <b>If you have chest pain, trouble breathing, fainting, or sudden weakness, call 911.</b> Talk to your doctor before starting a new exercise plan.</p>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  // ---------- Bluetooth identifiers ----------
+  const S = h => `0000${h}-0000-1000-8000-00805f9b34fb`;
+  const U = {
+    hrSvc: S('180d'), hrChar: S('2a37'), battSvc: S('180f'), battChar: S('2a19'),
+    sportSvc: S('fee7'), sportChar: S('fea1'), moySvc: S('feea'), moyOut: S('fee2'), moyIn: S('fee3'),
+  };
+  // Moyoung (Da Fit) command ids, as documented by the open-source Gadgetbridge project.
+  const CMD = { MSG: 65, FIND: 97, BP: 105, SPO2: 107, HR: 109 };
+
+  const $ = id => document.getElementById(id);
+  const now = () => Date.now();
+  const MIN = 60000;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+
+  // ---------- Log ----------
+  const logLines = [];
+  function log(msg) {
+    const line = `[${new Date().toLocaleTimeString([], { hour12: false })}] ${msg}`;
+    logLines.push(line); if (logLines.length > 600) logLines.shift();
+    const el = $('log'); el.textContent = logLines.slice(-200).join('\n'); el.scrollTop = el.scrollHeight;
+  }
+  const hex = arr => Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
+
+  // ---------- Profile ----------
+  const DEFAULT_PROFILE = { age: null, weight: null, ft: null, inch: null, goal: null, wRemind: 1, hrEvery: 15, spo2Every: 60, watch: true, phone: true, inactive: true };
+  let profile = Object.assign({}, DEFAULT_PROFILE, store.get('hd.profile', {}));
+  const hasProfile = () => profile.age && profile.weight && profile.ft != null && profile.inch != null;
+  function derived() {
+    if (!hasProfile()) return null;
+    const inches = profile.ft * 12 + profile.inch;
+    const bmi = 703 * profile.weight / (inches * inches);
+    const maxHR = Math.round(208 - 0.7 * profile.age); // Tanaka et al., 2001
+    return {
+      inches, bmi, maxHR,
+      moderate: [Math.round(maxHR * 0.5), Math.round(maxHR * 0.7)],  // AHA target zones
+      vigorous: [Math.round(maxHR * 0.7), Math.round(maxHR * 0.85)],
+      stepGoal: profile.age < 60 ? 8000 : 6000,                        // Paluch et al., 2022
+      bmiClass: bmi < 18.5 ? 'underweight' : bmi < 25 ? 'healthy weight' : bmi < 30 ? 'overweight' :
+        bmi < 35 ? 'obesity class 1' : bmi < 40 ? 'obesity class 2' : 'obesity class 3',
+    };
+  }
+  function loadProfileForm() {
+    $('pAge').value = profile.age ?? ''; $('pWeight').value = profile.weight ?? '';
+    $('pFt').value = profile.ft ?? ''; $('pIn').value = profile.inch ?? '';
+    $('pGoal').value = profile.goal ?? ''; $('pWRemind').value = String(profile.wRemind ?? 1);
+    $('pHrEvery').value = String(profile.hrEvery); $('pSpo2Every').value = String(profile.spo2Every);
+    $('pWatch').checked = profile.watch; $('pPhone').checked = profile.phone; $('pInactive').checked = profile.inactive;
+    renderDerived();
+  }
+  function renderDerived() {
+    const d = derived();
+    $('derived').innerHTML = d
+      ? `BMI <b>${d.bmi.toFixed(1)}</b> (${d.bmiClass}) · Estimated max heart rate <b>${d.maxHR}</b> bpm · Moderate exercise zone <b>${d.moderate[0]}–${d.moderate[1]}</b> bpm · Vigorous <b>${d.vigorous[0]}–${d.vigorous[1]}</b> bpm · Daily step goal <b>${d.stepGoal.toLocaleString()}</b>`
+      : 'Enter age, weight and height to personalise ranges.';
+    $('setupCard').hidden = !!d;
+  }
+  $('saveProfile').onclick = () => {
+    const num = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
+    profile = { age: num('pAge'), weight: num('pWeight'), ft: num('pFt'), inch: num('pIn') ?? 0,
+      goal: num('pGoal'), wRemind: +$('pWRemind').value,
+      hrEvery: +$('pHrEvery').value, spo2Every: +$('pSpo2Every').value,
+      watch: $('pWatch').checked, phone: $('pPhone').checked, inactive: $('pInactive').checked };
+    store.set('hd.profile', profile);
+    if (profile.weight && !weights.length) addWeight(profile.weight, todayStr(), true);
+    if (profile.phone) askNotifyPermission();
+    renderDerived(); renderAll();
+    log('Profile saved.');
+  };
+
+  // ---------- Day storage ----------
+  const dayKey = (t = now()) => { const d = new Date(t); return `hd.day.${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  let day = null, dayK = null;
+  function ensureDay() {
+    const k = dayKey();
+    if (k !== dayK) {
+      dayK = k;
+      day = Object.assign({ hr: {}, checks: [], spo2: [], steps: null, alerts: [] }, store.get(k, {}));
+      pruneOldDays();
+    }
+    return day;
+  }
+  let saveTimer = null;
+  function saveDay(soon) {
+    clearTimeout(saveTimer);
+    if (soon) saveTimer = setTimeout(() => store.set(dayK, day), 5000); else store.set(dayK, day);
+  }
+  function pruneOldDays() {
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('hd.day.')).sort();
+      while (keys.length > 30) localStorage.removeItem(keys.shift());
+    } catch {}
+  }
+  function recentRestingHRs(days = 7) {
+    const out = [];
+    for (let i = 0; i < days; i++) {
+      const rec = i === 0 ? ensureDay() : store.get(dayKey(now() - i * 86400000), null);
+      if (rec && rec.checks) rec.checks.forEach(c => { if (c.resting && c.hr) out.push(c.hr); });
+    }
+    return out;
+  }
+
+  // ---------- Live state ----------
+  const live = { hr: null, hrT: 0, samples: [], rr: [], batt: null, steps: null, meters: null, kcal: null,
+    lastStepChange: now(), lastSpo2: null, stress: null };
+  const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const isResting = () => now() - live.lastStepChange > 3 * MIN;
+
+  function onHeartRate(bpm, rrs) {
+    if (!bpm || bpm < 25 || bpm > 240) return;
+    const t = now();
+    live.hr = bpm; live.hrT = t;
+    live.samples.push({ t, bpm });
+    while (live.samples.length && live.samples[0].t < t - 15 * MIN) live.samples.shift();
+    if (rrs && rrs.length) { live.rr.push(...rrs.map(r => ({ t, r }))); while (live.rr.length && live.rr[0].t < t - 5 * MIN) live.rr.shift(); }
+    ensureDay();
+    const m = Math.floor((t - new Date(t).setHours(0, 0, 0, 0)) / MIN);
+    const b = day.hr[m] || (day.hr[m] = [0, 0, 999, 0]);
+    b[0] += bpm; b[1]++; b[2] = Math.min(b[2], bpm); b[3] = Math.max(b[3], bpm);
+    saveDay(true);
+    if (checkState.collectHR) checkState.collectHR.push({ t, bpm });
+    renderHR(); scheduleChart();
+  }
+  function onSport(steps, meters, kcal) {
+    if (live.steps !== null && steps > live.steps) live.lastStepChange = now();
+    if (live.steps === null) live.lastStepChange = now();
+    live.steps = steps; live.meters = meters; live.kcal = kcal;
+    ensureDay(); day.steps = { steps, meters, kcal, t: now() }; saveDay(true);
+    renderSteps(); renderTips();
+  }
+  function onBattery(p) { live.batt = p; $('battPill').hidden = false; $('battText').textContent = p + '%'; }
+
+  // ---------- Assessment rules ----------
+  // Each returns { level: ok|caution|alert|urgent, title, detail, watch }
+  function assessRestingHR(hr) {
+    if (hr > 120) return { level: 'alert', title: `Resting heart rate high: ${hr} bpm`, detail: 'Well above the normal resting range of 60–100 bpm (AHA). Sit down, breathe slowly and re-check in 5 minutes. If it stays this high, or you feel dizzy, short of breath or have chest discomfort, seek medical care.', watch: `HR ${hr} at rest - high. Sit, breathe slowly, recheck in 5 min.` };
+    if (hr > 100) return { level: 'caution', title: `Resting heart rate above normal: ${hr} bpm`, detail: 'Normal resting range is 60–100 bpm (AHA). Caffeine, dehydration, stress, poor sleep or illness can raise it. Rest and re-check; mention repeated high readings to your doctor.', watch: `HR ${hr} at rest is above 100. Rest & recheck.` };
+    if (hr < 40) return { level: 'alert', title: `Resting heart rate very low: ${hr} bpm`, detail: 'Below 40 bpm is unusually low for most people. If you feel faint, tired or short of breath, seek medical care. Check that the watch is snug — loose fit can cause false low readings.', watch: `HR ${hr} - very low. Check fit; seek care if faint.` };
+    if (hr < 50) return { level: 'caution', title: `Resting heart rate low: ${hr} bpm`, detail: 'Below 50 bpm can be normal for very fit people or during sleep, but tell your doctor if you also feel dizzy or tired. Some medicines (e.g. beta blockers) lower heart rate.', watch: `HR ${hr} at rest is low. Note any dizziness.` };
+    return { level: 'ok', title: `Resting heart rate ${hr} bpm`, detail: hr > 80 ? 'In the normal range (60–100). Research links lower resting rates with better heart health; regular aerobic exercise brings it down over time.' : 'In the normal range (60–100 bpm).' };
+  }
+  function assessActiveHR(hr, d) {
+    if (!d) return null;
+    if (hr >= Math.round(d.maxHR * 0.95)) return { level: 'alert', title: `Heart rate ${hr} bpm — near your maximum`, detail: `That's above 95% of your estimated maximum (${d.maxHR} bpm). Slow down and let your heart rate come down.`, watch: `HR ${hr} near max (${d.maxHR}). Slow down now.` };
+    if (hr >= d.vigorous[1]) return { level: 'caution', title: `Heart rate ${hr} bpm — above vigorous zone`, detail: `Above 85% of your estimated max (${d.vigorous[1]} bpm). Ease off to stay in a safer training range (${d.moderate[0]}–${d.vigorous[1]} bpm).`, watch: `HR ${hr} above your zone. Ease off.` };
+    return null;
+  }
+  function assessSpo2(v) {
+    if (v < 88) return { level: 'urgent', title: `Blood oxygen very low: ${v}%`, detail: 'Re-measure sitting still with warm hands. If it is still below 88%, or you are short of breath, confused or have bluish lips, seek medical care now.', watch: `SpO2 ${v}% very low. Re-measure; seek care if breathless.` };
+    if (v < 92) return { level: 'alert', title: `Blood oxygen low: ${v}%`, detail: 'Below 92% is low. Wrist sensors can under-read, so re-measure while still. If it stays low, contact your doctor.', watch: `SpO2 ${v}% low. Sit still & re-measure.` };
+    if (v < 95) return { level: 'caution', title: `Blood oxygen slightly low: ${v}%`, detail: 'Normal is 95–100%. A single reading of 92–94% is often sensor error — re-check. Repeated low readings, especially at night, are worth discussing with your doctor.', watch: `SpO2 ${v}% slightly low. Re-check later.` };
+    return { level: 'ok', title: `Blood oxygen ${v}%`, detail: 'In the normal range (95–100%).' };
+  }
+  function assessStress(s) {
+    if (s.score >= 75) return { level: 'caution', title: `Stress estimate high: ${s.score}/100`, detail: `${s.basis} Try 5 minutes of slow breathing (about 6 breaths a minute: in 5 s, out 5 s).`, watch: `Stress high (${s.score}). Try 5 min slow breathing.` };
+    if (s.score >= 50) return { level: 'ok', title: `Stress estimate elevated: ${s.score}/100`, detail: `${s.basis} A short walk or a few minutes of slow breathing can help.` };
+    return { level: 'ok', title: `Stress estimate ${s.score}/100 (${s.score < 25 ? 'relaxed' : 'normal'})`, detail: s.basis };
+  }
+  // Stress: uses beat-to-beat (RR) variability if the watch sends it; otherwise resting HR vs your personal baseline.
+  function estimateStress(restHR) {
+    const rr = live.rr.filter(x => x.t > now() - 2 * MIN).map(x => x.r);
+    if (rr.length >= 30) {
+      let sum = 0; for (let i = 1; i < rr.length; i++) sum += (rr[i] - rr[i - 1]) ** 2;
+      const rmssd = Math.sqrt(sum / (rr.length - 1));
+      const score = Math.max(0, Math.min(100, Math.round(100 - (Math.log(Math.max(rmssd, 5)) - Math.log(10)) / (Math.log(80) - Math.log(10)) * 100)));
+      return { score, basis: `Based on heart rate variability (RMSSD ${Math.round(rmssd)} ms; lower variability suggests more stress).` };
+    }
+    if (!restHR) return null;
+    const hist = recentRestingHRs(7);
+    const sorted = hist.slice().sort((a, b) => a - b);
+    const baseline = sorted.length >= 3 ? sorted[Math.floor(sorted.length * 0.2)] : 65;
+    const rise = (restHR - baseline) / baseline;
+    const score = Math.max(0, Math.min(100, Math.round(20 + rise * 200)));
+    return { score, basis: `Estimated from your resting heart rate (${restHR} bpm) compared with ${sorted.length >= 3 ? `your 7-day baseline (${baseline} bpm)` : 'a typical baseline until you have more readings'}. This watch doesn't share beat-to-beat data, so treat this as a rough guide.` };
+  }
+
+  // ---------- Alerts / notifications ----------
+  const ORDER = { ok: 0, caution: 1, alert: 2, urgent: 3 };
+  const lastAlert = store.get('hd.lastAlert', {});
+  function raise(type, a, cooldownMin = 30) {
+    if (!a || a.level === 'ok') return;
+    const t = now();
+    if (lastAlert[type] && t - lastAlert[type] < cooldownMin * MIN && a.level !== 'urgent') return;
+    lastAlert[type] = t; store.set('hd.lastAlert', lastAlert);
+    ensureDay(); day.alerts.push({ t, level: a.level, title: a.title, detail: a.detail }); saveDay();
+    showBanner(a); renderAlerts();
+    log(`ALERT [${a.level}] ${a.title}`);
+    if (profile.watch && a.watch) sendWatchMessage(a.watch);
+    if (profile.phone) phoneNotify(a.title, a.detail);
+  }
+  function showBanner(a) {
+    const el = document.createElement('div');
+    el.className = `banner ${a.level}`;
+    el.innerHTML = `<b></b><span></span><div class="t"></div>`;
+    el.querySelector('b').textContent = a.title; el.querySelector('span').textContent = a.detail;
+    el.querySelector('.t').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · tap to dismiss';
+    el.onclick = () => el.remove();
+    $('banners').prepend(el);
+    while ($('banners').children.length > 3) $('banners').lastChild.remove();
+  }
+  let swReg = null;
+  async function initSW() {
+    if (!('serviceWorker' in navigator)) return;
+    try { swReg = await navigator.serviceWorker.register('health-sw.js'); } catch (e) { log('Service worker failed: ' + e.message); }
+  }
+  async function askNotifyPermission() {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'denied') return false;
+    try { return (await Notification.requestPermission()) === 'granted'; } catch { return false; }
+  }
+  async function phoneNotify(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const reg = swReg || await navigator.serviceWorker?.ready;
+      if (reg) await reg.showNotification(title, { body, tag: title, renotify: true });
+      else new Notification(title, { body });
+    } catch (e) { log('Phone notification failed: ' + e.message); }
+  }
+
+  // ---------- Bluetooth ----------
+  let device = null, chars = {};
+  let gattQ = Promise.resolve();
+  const gatt = fn => { const p = gattQ.then(fn); gattQ = p.catch(() => {}); return p; };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  function setConn(on, text) {
+    $('connDot').className = 'dot' + (on ? ' on' : '');
+    $('connText').textContent = text || (on ? 'Connected' : 'Not connected');
+    $('connectBtn').hidden = on; $('disconnectBtn').hidden = !on;
+    $('checkBtn').disabled = !on;
+  }
+
+  if (!navigator.bluetooth) {
+    $('support').textContent = 'Bluetooth isn\'t available in this browser. Open this page in Chrome on Android with Bluetooth and Location on.';
+    $('connectBtn').disabled = true;
+  }
+
+  async function connect(dev) {
+    try {
+      if (!dev) {
+        dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true,
+          optionalServices: [U.hrSvc, U.battSvc, U.sportSvc, U.moySvc, S('180a')] });
+      }
+      device = dev;
+      store.set('hd.deviceId', device.id);
+      if (!device._hdListener) {
+        device.addEventListener('gattserverdisconnected', onDisconnect);
+        device._hdListener = true;
+      }
+      setConn(false, 'Connecting…');
+      log(`Connecting to ${device.name || 'watch'}…`);
+      const server = await device.gatt.connect();
+      chars = {};
+      const getChar = async (svc, ch) => { try { const s = await gatt(() => server.getPrimaryService(svc)); return await gatt(() => s.getCharacteristic(ch)); } catch (e) { log(`No ${ch.slice(4, 8)}: ${e.message}`); return null; } };
+      chars.hr = await getChar(U.hrSvc, U.hrChar);
+      chars.batt = await getChar(U.battSvc, U.battChar);
+      chars.sport = await getChar(U.sportSvc, U.sportChar);
+      chars.out = await getChar(U.moySvc, U.moyOut);
+      chars.in = await getChar(U.moySvc, U.moyIn);
+      setConn(true);
+      reconnectTries = 0;
+      log('Connected.');
+      if (chars.batt) { try { onBattery((await gatt(() => chars.batt.readValue())).getUint8(0)); } catch {} }
+      if (chars.sport) { try { parseSport(await gatt(() => chars.sport.readValue())); } catch {} }
+      await listen(chars.hr, ev => parseHR(ev.target.value));
+      await listen(chars.sport, ev => parseSport(ev.target.value));
+      await listen(chars.batt, ev => onBattery(ev.target.value.getUint8(0)));
+      await listen(chars.in, ev => onMoyoungData(new Uint8Array(ev.target.value.buffer, ev.target.value.byteOffset, ev.target.value.byteLength)));
+      if (!chars.out) log('Watch command channel not found: SpO2 measurement and watch messages will not work.');
+    } catch (e) {
+      log('Connect failed: ' + e.message);
+      setConn(false);
+    }
+  }
+  async function listen(ch, handler) {
+    if (!ch) return;
+    try { await gatt(() => ch.startNotifications()); ch.addEventListener('characteristicvaluechanged', handler); }
+    catch (e) { log(`Listen ${ch.uuid.slice(4, 8)} failed: ${e.message}`); }
+  }
+  let reconnectTries = 0, userDisconnect = false;
+  async function onDisconnect() {
+    setConn(false);
+    log('Watch disconnected.');
+    if (userDisconnect) { userDisconnect = false; return; }
+    if (reconnectTries < 5 && device) {
+      reconnectTries++;
+      const delay = 2000 * reconnectTries;
+      setConn(false, `Reconnecting (${reconnectTries})…`);
+      await wait(delay);
+      if (!device.gatt.connected) connect(device);
+    }
+  }
+  $('connectBtn').onclick = () => { reconnectTries = 0; connect(); };
+  $('disconnectBtn').onclick = () => { userDisconnect = true; if (device?.gatt.connected) device.gatt.disconnect(); };
+  // Offer to reconnect a previously-approved watch after a page reload (if the browser supports it).
+  (async () => {
+    if (!navigator.bluetooth?.getDevices) return;
+    try {
+      const id = store.get('hd.deviceId', null);
+      const devs = await navigator.bluetooth.getDevices();
+      const d = devs.find(x => x.id === id) || devs[0];
+      if (d) { $('reconnectBtn').hidden = false; $('reconnectBtn').textContent = `Reconnect ${d.name || 'watch'}`; $('reconnectBtn').onclick = () => { $('reconnectBtn').hidden = true; connect(d); }; }
+    } catch {}
+  })();
+
+  function parseHR(dv) {
+    const flags = dv.getUint8(0);
+    let o = 1;
+    const bpm = (flags & 1) ? dv.getUint16(o, true) : dv.getUint8(o); o += (flags & 1) ? 2 : 1;
+    if (flags & 8) o += 2; // energy expended
+    const rrs = [];
+    if (flags & 16) for (; o + 1 < dv.byteLength; o += 2) rrs.push(dv.getUint16(o, true) / 1024 * 1000);
+    onHeartRate(bpm, rrs);
+  }
+  function parseSport(dv) {
+    if (dv.byteLength < 4) return;
+    const u24 = o => dv.getUint8(o) | (dv.getUint8(o + 1) << 8) | (dv.getUint8(o + 2) << 16);
+    const flags = dv.getUint8(0); let o = 1, steps = 0, m = null, k = null;
+    if (flags & 1) { steps = u24(o); o += 3; }
+    if (flags & 2 && dv.byteLength >= o + 3) { m = u24(o); o += 3; }
+    if (flags & 4 && dv.byteLength >= o + 3) { k = u24(o); }
+    onSport(steps, m, k);
+  }
+
+  // Moyoung packets: FE EA <0x10> <total length> <cmd> <payload...>
+  async function moySend(cmd, payload = []) {
+    if (!chars.out || !device?.gatt.connected) { log('Cannot send: watch command channel unavailable.'); return false; }
+    const len = payload.length + 5;
+    const pkt = new Uint8Array(len);
+    pkt.set([0xfe, 0xea, 0x10 | ((len >> 8) & 0x0f), len & 0xff, cmd]); pkt.set(payload, 5);
+    try {
+      for (let i = 0; i < pkt.length; i += 20) {
+        const part = pkt.slice(i, i + 20);
+        await gatt(() => chars.out.properties.write ? chars.out.writeValueWithResponse(part) : chars.out.writeValueWithoutResponse(part));
+      }
+      log(`SEND cmd ${cmd}: ${hex(pkt)}`);
+      return true;
+    } catch (e) { log(`Send cmd ${cmd} failed: ${e.message}`); return false; }
+  }
+  let inBuf = [];
+  const moyWaiters = [];
+  function onMoyoungData(bytes) {
+    log(`RECV ${hex(bytes)}`);
+    if (bytes[0] === 0xfe && bytes[1] === 0xea) inBuf = [];
+    inBuf.push(...bytes);
+    if (inBuf.length < 5 || inBuf[0] !== 0xfe || inBuf[1] !== 0xea) return;
+    const len = ((inBuf[2] & 0x0f) << 8) | inBuf[3];
+    if (inBuf.length < len) return;
+    const cmd = inBuf[4], payload = inBuf.slice(5, len);
+    inBuf = inBuf.slice(len);
+    handlePacket(cmd, payload);
+  }
+  function handlePacket(cmd, payload) {
+    if (cmd === CMD.HR && payload[0] > 25 && payload[0] < 240) onHeartRate(payload[0]);
+    if (cmd === CMD.SPO2 && payload[0] >= 70 && payload[0] <= 100) log(`Watch reported SpO2 ${payload[0]}%`);
+    for (let i = moyWaiters.length - 1; i >= 0; i--) {
+      const w = moyWaiters[i];
+      if (w.cmd === cmd && w.test(payload)) { moyWaiters.splice(i, 1); w.resolve(payload); }
+    }
+  }
+  function waitPacket(cmd, test, ms) {
+    return new Promise(resolve => {
+      const w = { cmd, test, resolve };
+      moyWaiters.push(w);
+      setTimeout(() => { const i = moyWaiters.indexOf(w); if (i >= 0) { moyWaiters.splice(i, 1); resolve(null); } }, ms);
+    });
+  }
+  function sendWatchMessage(text) {
+    const bytes = Array.from(new TextEncoder().encode(text)).slice(0, 120);
+    return moySend(CMD.MSG, [1, ...bytes]); // type 1 = text message
+  }
+  $('testWatch').onclick = async () => {
+    const ok = await sendWatchMessage('Health Dashboard: test message. Alerts will look like this.');
+    showBanner({ level: ok ? 'ok' : 'caution', title: ok ? 'Test sent to watch' : 'Could not send to watch', detail: ok ? 'If nothing appears on the watch within a few seconds, copy the technical log and share it.' : 'Connect the watch first.' });
+  };
+  $('testPhone').onclick = async () => {
+    const ok = await askNotifyPermission();
+    if (ok) phoneNotify('Health Dashboard', 'Test notification. Alerts will look like this.');
+    else showBanner({ level: 'caution', title: 'Notifications blocked', detail: 'Allow notifications for this site in Chrome settings.' });
+  };
+
+  // ---------- Health checks ----------
+  const checkState = { running: false, collectHR: null };
+  async function measureHR(seconds, label) {
+    checkState.collectHR = [];
+    await moySend(CMD.HR, [0]);
+    for (let s = seconds; s > 0; s--) {
+      progress(`${label} ${s}s… ${live.hr && now() - live.hrT < 5000 ? `(${live.hr} bpm)` : ''}`);
+      await wait(1000);
+    }
+    await moySend(CMD.HR, [0xff]);
+    const pts = checkState.collectHR; checkState.collectHR = null;
+    const lastHalf = pts.filter(p => p.t > now() - (seconds / 2) * 1000).map(p => p.bpm);
+    return Math.round(median(lastHalf.length >= 3 ? lastHalf : pts.map(p => p.bpm)) || 0) || null;
+  }
+  async function measureSpo2() {
+    if (!chars.out) return null;
+    const pending = waitPacket(CMD.SPO2, p => p[0] >= 70 && p[0] <= 100, 70000);
+    await moySend(CMD.SPO2, [0]);
+    let done = false; pending.then(() => { done = true; });
+    for (let s = 70; s > 0 && !done; s--) { progress(`Measuring blood oxygen… up to ${s}s`); await wait(1000); }
+    const res = await pending;
+    await moySend(CMD.SPO2, [0xff]);
+    return res ? res[0] : null;
+  }
+  function progress(t) { $('progress').textContent = t; }
+
+  function recordSpo2(v, src) {
+    ensureDay(); day.spo2.push({ t: now(), v, src }); saveDay();
+    live.lastSpo2 = { v, t: now() };
+    renderSpo2();
+  }
+
+  async function runHealthCheck() {
+    if (checkState.running) return;
+    checkState.running = true; $('checkBtn').disabled = true;
+    const results = [];
+    try {
+      const resting = isResting();
+      const hr = await measureHR(45, 'Measuring heart rate — stay still');
+      if (hr) {
+        results.push(resting ? assessRestingHR(hr) : Object.assign(assessRestingHR(hr), { level: 'ok', title: `Heart rate ${hr} bpm (you were moving)`, detail: 'You took steps in the last few minutes, so this isn\'t a resting reading. Sit for 3–5 minutes and run the check again for a resting value.' }));
+      } else {
+        results.push({ level: 'na', title: 'No heart rate received', detail: 'Make sure the watch is snug, then try again. You can also start a heart-rate measurement on the watch while the check runs.' });
+      }
+      const spo2 = await measureSpo2();
+      if (spo2) { recordSpo2(spo2, 'watch'); results.push(assessSpo2(spo2)); }
+      else results.push({ level: 'na', title: 'No blood-oxygen reading', detail: chars.out ? 'The watch didn\'t send a result. Measure SpO2 on the watch itself, then tap "Enter SpO2 from watch".' : 'This watch connection has no command channel. Measure on the watch and tap "Enter SpO2 from watch".' });
+      const stress = resting && hr ? estimateStress(hr) : null;
+      if (stress) { live.stress = stress; results.push(assessStress(stress)); }
+      else results.push({ level: 'na', title: 'Stress not estimated', detail: 'Needs a resting heart-rate reading (no steps for 3 minutes).' });
+
+      ensureDay();
+      day.checks.push({ t: now(), hr, resting, spo2, stress: stress?.score ?? null });
+      saveDay();
+      if (stress) renderStress();
+      renderResults(results);
+      progress(`Check finished at ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`);
+      if (hr && resting) raise('restHR', assessRestingHR(hr));
+      if (spo2) raise('spo2', assessSpo2(spo2));
+      if (stress) raise('stress', assessStress(stress), 120);
+      renderAll();
+    } finally {
+      checkState.running = false; $('checkBtn').disabled = !device?.gatt.connected;
+    }
+  }
+  $('checkBtn').onclick = runHealthCheck;
+  $('spo2ManualBtn').onclick = () => {
+    const v = parseInt(prompt('Blood oxygen (SpO2 %) shown on the watch:'), 10);
+    if (!(v >= 50 && v <= 100)) return;
+    recordSpo2(v, 'manual');
+    const a = assessSpo2(v);
+    renderResults([a]);
+    raise('spo2', a);
+  };
+
+  // Background rules: run every 30 s.
+  let lastAutoHR = now(), lastAutoSpo2 = now();
+  setInterval(async () => {
+    const d = derived();
+    const recent = live.samples.filter(s => s.t > now() - 2 * MIN).map(s => s.bpm);
+    if (recent.length >= 10) {
+      const med = Math.round(median(recent));
+      if (isResting() && (med > 100 || med < 45)) raise('restHR', assessRestingHR(med));
+      else if (!isResting()) raise('activeHR', assessActiveHR(med, d), 10);
+    }
+    const h = new Date().getHours();
+    if (profile.inactive && device?.gatt.connected && h >= 8 && h < 21 && now() - live.lastStepChange > 60 * MIN) {
+      raise('inactive', { level: 'caution', title: 'Time to move', detail: 'You haven\'t moved for an hour. A 2–5 minute walk breaks up sitting time, which helps blood sugar and circulation.', watch: 'Sitting 1 hr. Take a 3-5 min walk.' }, 60);
+    }
+    if (!device?.gatt.connected || checkState.running) return;
+    if (profile.hrEvery && now() - lastAutoHR > profile.hrEvery * MIN) {
+      lastAutoHR = now(); checkState.running = true;
+      try {
+        const resting = isResting();
+        const hr = await measureHR(30, 'Auto heart-rate check');
+        progress('');
+        if (hr) {
+          ensureDay(); day.checks.push({ t: now(), hr, resting, spo2: null, stress: null, auto: true }); saveDay();
+          if (resting) { raise('restHR', assessRestingHR(hr)); const st = estimateStress(hr); if (st) { live.stress = st; renderStress(); if (st.score >= 75) raise('stress', assessStress(st), 120); } }
+          renderAll();
+        }
+      } finally { checkState.running = false; }
+    } else if (profile.spo2Every && chars.out && now() - lastAutoSpo2 > profile.spo2Every * MIN) {
+      lastAutoSpo2 = now(); checkState.running = true;
+      try { const v = await measureSpo2(); progress(''); if (v) { recordSpo2(v, 'auto'); raise('spo2', assessSpo2(v)); } }
+      finally { checkState.running = false; }
+    }
+  }, 30000);
+
+  // ---------- Rendering ----------
+  const lvlClass = a => a ? `lvl-${a.level}` : '';
+  function renderHR() {
+    const fresh = live.hr && now() - live.hrT < 30000;
+    const d = derived();
+    $('hrVal').innerHTML = `${fresh ? live.hr : '–'}<small> bpm</small>`;
+    let a = null, note = fresh ? '' : 'Run a check or open HR on the watch';
+    if (fresh) {
+      if (isResting()) { a = assessRestingHR(live.hr); note = a.level === 'ok' ? 'Normal at rest (60–100)' : a.title.split(':')[0]; }
+      else {
+        a = assessActiveHR(live.hr, d) || { level: 'ok' };
+        note = d ? (live.hr >= d.vigorous[0] ? 'Vigorous zone' : live.hr >= d.moderate[0] ? 'Moderate zone' : 'Light activity') : 'Active';
+      }
+    }
+    $('hrVal').className = 'value ' + lvlClass(a);
+    $('hrNote').textContent = note;
+  }
+  setInterval(renderHR, 5000);
+  function renderSpo2() {
+    ensureDay();
+    const last = day.spo2[day.spo2.length - 1];
+    if (!last) return;
+    const a = assessSpo2(last.v);
+    $('spo2Val').innerHTML = `${last.v}<small> %</small>`; $('spo2Val').className = 'value ' + lvlClass(a);
+    $('spo2Note').textContent = `${a.level === 'ok' ? 'Normal (95–100)' : 'Below normal'} · ${new Date(last.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  }
+  function renderStress() {
+    let s = live.stress;
+    if (!s) { ensureDay(); const c = [...day.checks].reverse().find(c => c.stress != null); if (c) s = { score: c.stress }; }
+    if (!s) return;
+    $('stressVal').innerHTML = `${s.score}<small> /100</small>`;
+    $('stressVal').className = 'value ' + (s.score >= 75 ? 'lvl-caution' : s.score >= 50 ? '' : 'lvl-ok');
+    $('stressNote').textContent = s.score < 25 ? 'Relaxed' : s.score < 50 ? 'Normal' : s.score < 75 ? 'Elevated' : 'High — try slow breathing';
+  }
+  function renderSteps() {
+    ensureDay();
+    const st = live.steps ?? day.steps?.steps, m = live.meters ?? day.steps?.meters, k = live.kcal ?? day.steps?.kcal;
+    const d = derived(); const goal = d ? d.stepGoal : 8000;
+    if (st != null) {
+      $('stepsVal').textContent = st.toLocaleString();
+      $('stepsBar').style.width = Math.min(100, st / goal * 100) + '%';
+      $('stepsNote').textContent = st >= goal ? `Goal of ${goal.toLocaleString()} reached!` : `${(goal - st).toLocaleString()} to go (goal ${goal.toLocaleString()})`;
+    }
+    if (m != null) $('distVal').innerHTML = `${(m / 1609.34).toFixed(2)}<small> mi</small>`;
+    if (k != null) $('kcalNote').textContent = `${k} kcal from activity`;
+  }
+  function renderRest() {
+    ensureDay();
+    const r = day.checks.filter(c => c.resting && c.hr).map(c => c.hr);
+    if (!r.length) return;
+    const lo = Math.min(...r), a = assessRestingHR(lo);
+    $('restVal').innerHTML = `${lo}<small> bpm</small>`; $('restVal').className = 'value ' + lvlClass(a);
+    $('restNote').textContent = `${r.length} resting check${r.length > 1 ? 's' : ''} today`;
+  }
+  function renderResults(list) {
+    $('results').innerHTML = '';
+    for (const r of list) {
+      const el = document.createElement('div'); el.className = 'result';
+      const label = { ok: 'OK', caution: 'CHECK', alert: 'WARN', urgent: 'URGENT', na: 'N/A' }[r.level];
+      el.innerHTML = `<span class="badge ${r.level}">${label}</span><div><b></b><div class="muted"></div></div>`;
+      el.querySelector('b').textContent = r.title; el.querySelector('.muted').textContent = r.detail;
+      $('results').appendChild(el);
+    }
+  }
+  function renderAlerts() {
+    ensureDay();
+    if (!day.alerts.length) { $('alertList').textContent = 'No alerts yet.'; $('alertList').className = 'muted'; return; }
+    $('alertList').className = '';
+    $('alertList').innerHTML = '';
+    for (const a of [...day.alerts].reverse().slice(0, 20)) {
+      const el = document.createElement('div'); el.className = 'result';
+      el.innerHTML = `<span class="badge ${a.level}">${new Date(a.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span><div><b></b><div class="muted"></div></div>`;
+      el.querySelector('b').textContent = a.title; el.querySelector('.muted').textContent = a.detail;
+      $('alertList').appendChild(el);
+    }
+  }
+
+  // ---------- Research-based suggestions ----------
+  const TIPS = [
+    { id: 'steps', when: c => c.d && (c.steps ?? 0) < c.d.stepGoal,
+      title: c => `Aim for ${c.d.stepGoal.toLocaleString()}+ steps a day`,
+      text: c => `A large analysis of 15 studies found adults under 60 had the lowest risk of early death at about 8,000–10,000 steps a day, with benefits starting well below that. If that feels far off, add about 1,000 steps a day each week.${c.steps != null ? ` You're at ${c.steps.toLocaleString()} so far today.` : ''}`,
+      src: 'Paluch et al., Lancet Public Health, 2022' },
+    { id: 'weight', when: c => c.d && c.d.bmi >= 30,
+      title: c => `Losing 5–7% of body weight brings big health gains`,
+      text: c => { const base = weights.length ? weights[0].lb : profile.weight; return `For you that's about ${Math.round(base * 0.05)}–${Math.round(base * 0.07)} lb. In the Diabetes Prevention Program, 7% weight loss plus 150 minutes a week of brisk walking cut the risk of developing type 2 diabetes by 58%. Modest loss also improves blood pressure and cholesterol. Aim for 1–2 lb a week.`; },
+      src: 'Knowler et al., NEJM, 2002; Look AHEAD Research Group' },
+    { id: 'weighing', when: c => c.d && c.d.bmi >= 25,
+      title: () => 'Weigh yourself regularly',
+      text: c => `People who weigh themselves daily or weekly lose more weight and regain less than those who rarely weigh in. ${c.wcount ? `You've logged ${c.wcount} weigh-in${c.wcount > 1 ? 's' : ''} so far.` : 'Log your first weight in the Weight section.'}`,
+      src: 'Zheng et al., Obesity, 2015; Steinberg et al., Annals of Behavioral Medicine, 2015' },
+    { id: 'activity', when: c => c.d,
+      title: c => `150 minutes a week in your moderate zone (${c.d.moderate[0]}–${c.d.moderate[1]} bpm)`,
+      text: () => 'National guidelines recommend at least 150 minutes a week of moderate activity, like brisk walking, plus muscle-strengthening on 2 days. Short bouts count.',
+      src: 'US Physical Activity Guidelines, 2nd ed., 2018; AHA target heart rates' },
+    { id: 'meals', when: c => c.d,
+      title: () => 'Walk for 2–5 minutes after meals',
+      text: () => 'Even short, light walks after eating noticeably lower blood-sugar spikes compared with sitting or standing.',
+      src: 'Buffey et al., Sports Medicine, 2022' },
+    { id: 'restHR', when: c => c.rest && c.rest > 80,
+      title: () => 'Bring your resting heart rate down',
+      text: c => `Your resting rate today was ${c.rest} bpm. A meta-analysis found each 10 bpm higher resting heart rate was linked to about 9% higher risk of death from all causes. Regular aerobic exercise, good sleep, and less alcohol and caffeine all help lower it.`,
+      src: 'Zhang et al., CMAJ, 2016' },
+    { id: 'stress', when: c => c.stress != null && c.stress >= 50,
+      title: () => 'Try slow breathing',
+      text: () => 'Breathing at about 6 breaths a minute (in for 5 seconds, out for 5) for 5 minutes calms the nervous system and can lower heart rate and blood pressure.',
+      src: 'Zaccaro et al., Frontiers in Human Neuroscience, 2018' },
+    { id: 'sitting', when: c => c.d,
+      title: () => 'Break up long sitting every 30 minutes',
+      text: () => 'Getting up for 2 minutes of light walking every 20–30 minutes lowered blood sugar and insulin after meals compared with uninterrupted sitting.',
+      src: 'Dunstan et al., Diabetes Care, 2012' },
+    { id: 'sleep', when: c => c.d && (c.d.bmi >= 35 || (c.spo2 != null && c.spo2 < 95)),
+      title: () => 'Get 7+ hours of sleep — and ask about sleep apnea',
+      text: c => `Adults need at least 7 hours of sleep a night. Obesity${c.spo2 != null && c.spo2 < 95 ? ' and low blood-oxygen readings are' : ' is'} a major risk factor for obstructive sleep apnea, which is common and treatable. If you snore loudly or feel sleepy during the day, ask your doctor about a sleep study.`,
+      src: 'Watson et al., AASM/SRS consensus, Sleep, 2015; AASM' },
+    { id: 'spo2', when: c => c.spo2 != null && c.spo2 < 95,
+      title: () => 'Getting an accurate blood-oxygen reading',
+      text: () => 'Sit still, keep your arm resting at heart level, make sure the watch is snug above the wrist bone, and warm cold hands first. Wrist and finger sensors can be off by several percent; repeated low readings should be checked by a doctor.',
+      src: 'US FDA safety communication on pulse oximeters, 2021' },
+  ];
+  function renderTips() {
+    ensureDay();
+    const d = derived();
+    const rest = (() => { const r = day.checks.filter(c => c.resting && c.hr).map(c => c.hr); return r.length ? Math.min(...r) : null; })();
+    const spo2 = day.spo2.length ? day.spo2[day.spo2.length - 1].v : null;
+    const stress = live.stress?.score ?? ([...day.checks].reverse().find(c => c.stress != null)?.stress ?? null);
+    const c = { d, steps: live.steps ?? day.steps?.steps ?? null, rest, spo2, stress, wcount: weights.length };
+    const list = TIPS.filter(t => { try { return t.when(c); } catch { return false; } });
+    if (!d) { $('tips').innerHTML = '<div class="muted">Fill in your profile (below) to get personalised suggestions.</div>'; return; }
+    // Put the most situation-specific tips first.
+    const priority = ['spo2', 'stress', 'restHR', 'steps', 'weight', 'weighing', 'sleep', 'activity', 'meals', 'sitting'];
+    list.sort((a, b) => priority.indexOf(a.id) - priority.indexOf(b.id));
+    $('tips').innerHTML = '';
+    for (const t of list.slice(0, 6)) {
+      const el = document.createElement('div'); el.className = 'tip';
+      el.innerHTML = '<b></b><div></div><div class="src"></div>';
+      el.querySelector('b').textContent = t.title(c); el.querySelector('div').textContent = t.text(c);
+      el.querySelector('.src').textContent = 'Source: ' + t.src;
+      $('tips').appendChild(el);
+    }
+  }
+
+  // ---------- Weight tracker ----------
+  const todayStr = (t = now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const dateMs = s => new Date(s + 'T12:00:00').getTime();
+  let weights = store.get('hd.weights', []); // [{d:'YYYY-MM-DD', lb}]
+  function saveWeights() {
+    weights.sort((a, b) => a.d < b.d ? -1 : 1);
+    store.set('hd.weights', weights);
+    const latest = weights[weights.length - 1];
+    if (latest && profile.weight !== latest.lb) { profile.weight = latest.lb; store.set('hd.profile', profile); $('pWeight').value = latest.lb; renderDerived(); }
+  }
+  function addWeight(lb, d, quiet) {
+    const i = weights.findIndex(w => w.d === d);
+    if (i >= 0) weights[i].lb = lb; else weights.push({ d, lb });
+    saveWeights();
+    if (!quiet) log(`Weight logged: ${lb} lb on ${d}`);
+    renderWeight(); renderTips();
+  }
+  $('wDate').value = todayStr();
+  $('wAdd').onclick = () => {
+    const lb = parseFloat($('wInput').value);
+    if (!(lb >= 50 && lb <= 700)) { $('wInput').focus(); return; }
+    addWeight(Math.round(lb * 10) / 10, $('wDate').value || todayStr());
+    $('wInput').value = ''; $('wDate').value = todayStr();
+  };
+  function weightStats() {
+    if (!weights.length) return null;
+    const start = weights[0], cur = weights[weights.length - 1];
+    const goal = profile.goal || Math.round(start.lb * 0.93 * 10) / 10;
+    // Weekly rate: linear-regression slope over the last 28 days (needs 2+ entries spanning 7+ days).
+    const cutoff = dateMs(cur.d) - 28 * 86400000;
+    const recent = weights.filter(w => dateMs(w.d) >= cutoff);
+    let rate = null;
+    if (recent.length >= 2 && dateMs(recent[recent.length - 1].d) - dateMs(recent[0].d) >= 7 * 86400000) {
+      const xs = recent.map(w => dateMs(w.d) / (7 * 86400000)), ys = recent.map(w => w.lb);
+      const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+      let num = 0, den = 0; xs.forEach((x, i) => { num += (x - mx) * (ys[i] - my); den += (x - mx) ** 2; });
+      rate = den ? num / den : null;
+    }
+    const toLose = start.lb - goal, lost = start.lb - cur.lb;
+    const pct = toLose > 0 ? Math.max(0, Math.min(100, lost / toLose * 100)) : 0;
+    let eta = null;
+    if (rate && rate < -0.1 && cur.lb > goal) eta = new Date(dateMs(cur.d) + (cur.lb - goal) / -rate * 7 * 86400000);
+    return { start, cur, goal, rate, lost, pct, eta, pctBody: lost / start.lb * 100 };
+  }
+  function renderWeight() {
+    const st = weightStats();
+    const fmt = v => (v > 0 ? '+' : '') + v.toFixed(1);
+    if (!st) {
+      $('wSub').textContent = 'No entries yet';
+      $('wGoalTitle').textContent = 'Goal'; $('wGoalNote').textContent = 'Log your weight to start tracking. Weigh at the same time each day, e.g. in the morning before eating.';
+      $('wList').innerHTML = ''; renderWeightChart(null); return;
+    }
+    const d = derived();
+    $('wSub').textContent = d ? `BMI ${d.bmi.toFixed(1)}` : '';
+    $('wNow').textContent = st.cur.lb.toFixed(1);
+    $('wChange').textContent = weights.length > 1 ? fmt(st.cur.lb - st.start.lb) : '–';
+    $('wChange').className = st.cur.lb < st.start.lb ? 'lvl-ok' : st.cur.lb > st.start.lb ? 'lvl-caution' : '';
+    $('wRate').textContent = st.rate == null ? '–' : fmt(st.rate);
+    $('wGoalTitle').textContent = `Goal: ${st.goal.toFixed(1)} lb${profile.goal ? '' : ' (7% loss)'}`;
+    $('wGoalPct').textContent = `${Math.round(st.pct)}%`;
+    $('wGoalBar').style.width = st.pct + '%';
+    const left = st.cur.lb - st.goal;
+    $('wGoalNote').textContent = left <= 0 ? 'Goal reached — great work! Set a new goal in Profile & settings.'
+      : `${left.toFixed(1)} lb to go · ${st.pctBody > 0 ? st.pctBody.toFixed(1) + '% of starting weight lost' : 'started ' + new Date(dateMs(st.start.d)).toLocaleDateString()}` +
+        (st.eta ? ` · on track for ${st.eta.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}` : '');
+    let note = '';
+    if (st.rate != null) {
+      if (st.rate < -2) note = `You're losing about ${(-st.rate).toFixed(1)} lb/week. Faster than 1–2 lb/week is harder to keep off and can mean losing muscle; make sure you're eating enough protein and check with your doctor.`;
+      else if (st.rate <= -1) note = `Losing ${(-st.rate).toFixed(1)} lb/week is right in the healthy, sustainable range of 1–2 lb/week (CDC).`;
+      else if (st.rate <= -0.3) note = `Losing ${(-st.rate).toFixed(1)} lb/week — slow and steady progress. The CDC's healthy range is 1–2 lb/week if you want to speed up a little.`;
+      else if (st.rate < 0.3) note = 'Your weight is steady over the last 4 weeks. Small changes — an extra daily walk, or swapping sugary drinks for water — can restart progress.';
+      else note = `Your weight is up about ${st.rate.toFixed(1)} lb/week over the last 4 weeks. Day-to-day changes are often water; watch the trend over a few more weeks.`;
+    }
+    $('wNoteBox').textContent = note;
+    $('wList').innerHTML = '';
+    [...weights].reverse().forEach((w, idx, arr) => {
+      const prev = arr[idx + 1];
+      const el = document.createElement('div'); el.className = 'wrow';
+      el.innerHTML = `<span>${new Date(dateMs(w.d)).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span><span><b>${w.lb.toFixed(1)}</b> <span class="muted">${prev ? fmt(w.lb - prev.lb) : ''}</span> <button>Delete</button></span>`;
+      el.querySelector('button').onclick = () => { if (confirm(`Delete ${w.lb} lb on ${w.d}?`)) { weights = weights.filter(x => x !== w); saveWeights(); renderWeight(); renderTips(); } };
+      $('wList').appendChild(el);
+    });
+    renderWeightChart(st);
+  }
+  function renderWeightChart(st) {
+    const cv = $('wChart'), dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+    const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    g.font = '11px system-ui, sans-serif'; g.fillStyle = css('--muted');
+    if (!st) { g.fillText('Your weight chart will appear here.', 8, H / 2); return; }
+    const t0 = dateMs(weights[0].d), t1 = Math.max(dateMs(st.cur.d), t0 + 14 * 86400000);
+    const vals = weights.map(w => w.lb).concat(st.goal);
+    let lo = Math.floor(Math.min(...vals) - 3), hi = Math.ceil(Math.max(...vals) + 3);
+    const padL = 34, padR = 8, padT = 8, padB = 20;
+    const x = t => padL + (W - padL - padR) * (t - t0) / (t1 - t0);
+    const y = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+    g.strokeStyle = css('--grid'); g.lineWidth = 1;
+    const step = Math.max(1, Math.ceil((hi - lo) / 4 / 5) * 5);
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) { g.beginPath(); g.moveTo(padL, y(v)); g.lineTo(W - padR, y(v)); g.stroke(); g.fillText(v, 2, y(v) + 4); }
+    // goal line
+    g.strokeStyle = css('--ok'); g.setLineDash([5, 4]); g.beginPath(); g.moveTo(padL, y(st.goal)); g.lineTo(W - padR, y(st.goal)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = css('--ok'); g.fillText('goal', W - padR - 26, y(st.goal) - 4);
+    // date labels
+    g.fillStyle = css('--muted');
+    const lbl = t => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    g.fillText(lbl(t0), padL, H - 5); const e = lbl(t1); g.fillText(e, W - padR - g.measureText(e).width, H - 5);
+    // 7-day moving average line + raw points
+    const pts = weights.map(w => ({ t: dateMs(w.d), v: w.lb }));
+    const avg = pts.map(p => { const win = pts.filter(q => q.t <= p.t && q.t > p.t - 7 * 86400000); return { t: p.t, v: win.reduce((a, b) => a + b.v, 0) / win.length }; });
+    g.strokeStyle = css('--chart-line'); g.lineWidth = 2; g.lineJoin = 'round'; g.beginPath();
+    avg.forEach((p, i) => i ? g.lineTo(x(p.t), y(p.v)) : g.moveTo(x(p.t), y(p.v))); g.stroke();
+    g.fillStyle = css('--chart-line');
+    for (const p of pts) { g.globalAlpha = .45; g.beginPath(); g.arc(x(p.t), y(p.v), 3, 0, 7); g.fill(); }
+    g.globalAlpha = 1;
+  }
+  // Weekly weigh-in reminder (once a day check; reminds if no entry in 7 days).
+  function weighInReminder() {
+    if (!profile.wRemind || !weights.length) return;
+    const last = dateMs(weights[weights.length - 1].d);
+    const h = new Date().getHours();
+    if (now() - last > 7 * 86400000 && h >= 7 && h < 11)
+      raise('weighin', { level: 'caution', title: 'Time for your weekly weigh-in', detail: 'Weighing yourself regularly is linked with more successful weight loss and keeping it off. Log today\'s weight in the dashboard.', watch: 'Weekly weigh-in: log your weight today.' }, 24 * 60);
+  }
+  setInterval(weighInReminder, 10 * MIN);
+
+  // ---------- Chart ----------
+  let chartPending = false;
+  function scheduleChart() { if (chartPending) return; chartPending = true; setTimeout(() => { chartPending = false; renderChart(); }, 2000); }
+  function renderChart() {
+    ensureDay();
+    const cv = $('chart'), dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const padL = 30, padR = 6, padT = 8, padB = 20, yMin = 40, yMax = 180;
+    const x = m => padL + (W - padL - padR) * m / 1440;
+    const y = v => padT + (H - padT - padB) * (1 - (Math.max(yMin, Math.min(yMax, v)) - yMin) / (yMax - yMin));
+    g.clearRect(0, 0, W, H);
+    // normal resting band 60–100
+    g.fillStyle = css('--band'); g.fillRect(padL, y(100), W - padL - padR, y(60) - y(100));
+    g.strokeStyle = css('--grid'); g.lineWidth = 1; g.fillStyle = css('--muted'); g.font = '11px system-ui, sans-serif';
+    for (const v of [60, 100, 140, 180]) { g.beginPath(); g.moveTo(padL, y(v)); g.lineTo(W - padR, y(v)); g.stroke(); g.fillText(v, 2, y(v) + 4); }
+    for (const h of [0, 6, 12, 18, 24]) { const lbl = h === 0 || h === 24 ? '12a' : h === 12 ? '12p' : h < 12 ? h + 'a' : (h - 12) + 'p'; g.fillText(lbl, Math.min(x(h * 60) - 8, W - 22), H - 5); }
+    const mins = Object.keys(day.hr).map(Number).sort((a, b) => a - b);
+    g.strokeStyle = css('--chart-line'); g.lineWidth = 2; g.lineJoin = 'round';
+    g.beginPath(); let prev = null;
+    let sum = 0, n = 0, lo = Infinity, hi = 0;
+    for (const m of mins) {
+      const b = day.hr[m]; const v = b[0] / b[1];
+      sum += b[0]; n += b[1]; lo = Math.min(lo, b[2]); hi = Math.max(hi, b[3]);
+      if (prev === null || m - prev > 5) g.moveTo(x(m), y(v)); else g.lineTo(x(m), y(v));
+      prev = m;
+    }
+    g.stroke();
+    for (const m of mins) { if (mins.includes(m - 1) || mins.includes(m + 1)) continue; const b = day.hr[m]; g.fillStyle = css('--chart-line'); g.beginPath(); g.arc(x(m), y(b[0] / b[1]), 2.5, 0, 7); g.fill(); }
+    $('statAvg').textContent = n ? Math.round(sum / n) : '–';
+    $('statMin').textContent = n ? lo : '–';
+    $('statMax').textContent = n ? hi : '–';
+    $('chartLegend').textContent = 'Shaded: normal resting range';
+  }
+  window.addEventListener('resize', () => { scheduleChart(); renderWeight(); });
+
+  function renderAll() { renderWeight(); renderHR(); renderSpo2(); renderStress(); renderSteps(); renderRest(); renderTips(); renderAlerts(); renderChart(); }
+
+  // ---------- Screen wake lock ----------
+  let wakeLock = null;
+  $('wakeBtn').onclick = async () => {
+    try {
+      if (wakeLock) { await wakeLock.release(); wakeLock = null; $('wakeBtn').textContent = 'Keep screen on'; return; }
+      wakeLock = await navigator.wakeLock.request('screen');
+      $('wakeBtn').textContent = 'Screen staying on ✓';
+      wakeLock.addEventListener('release', () => { wakeLock = null; $('wakeBtn').textContent = 'Keep screen on'; });
+    } catch (e) { log('Wake lock failed: ' + e.message); }
+  };
+  $('copyLog').onclick = async () => { try { await navigator.clipboard.writeText(logLines.join('\n')); log('Log copied.'); } catch { log('Copy failed.'); } };
+
+  // ---------- Start ----------
+  ensureDay(); loadProfileForm(); renderAll(); initSW();
+  if (!hasProfile()) { $('profileDetails').open = true; }
+  setInterval(() => { if (dayKey() !== dayK) { saveDay(); ensureDay(); renderAll(); } }, MIN);
+  window.addEventListener('pagehide', () => saveDay());
+  // Exposed for testing only.
+  window.__hd = { onHeartRate, onSport, assessRestingHR, assessSpo2, estimateStress, derived, handlePacket, raise };
+})();
+</script>
+</body>
+</html>
